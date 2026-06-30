@@ -5,7 +5,9 @@ export function mergeEnv(existing: string, updates: Record<string, string>): str
     const line = `${k}=${v}`;
     const re = new RegExp(`^${k}=.*$`, "m");
     if (re.test(out)) {
-      out = out.replace(re, line);
+      // Function replacement: a string here would interpret $-specials ($&, $$, $1)
+      // and corrupt secret values that contain them.
+      out = out.replace(re, () => line);
     } else {
       out += `${out.length && !out.endsWith("\n") ? "\n" : ""}${line}\n`;
     }

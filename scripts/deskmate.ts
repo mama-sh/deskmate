@@ -231,17 +231,21 @@ async function init(): Promise<void> {
     const updates: Record<string, string> = {};
     for (const id of ids) {
       for (const prov of readDeskmate(join(LIBRARY, id)).providers) {
-        const up = prov.toUpperCase();
+        const up = prov.toUpperCase().replace(/[^A-Z0-9]/g, "_");
         const url = await ask(`${id}: ${prov} MCP URL`, "");
         const token = await ask(`${id}: ${prov} MCP token`, "");
         if (url) updates[`${up}_MCP_URL`] = url;
         if (token) updates[`${up}_MCP_TOKEN`] = token;
       }
     }
-    const envPath = join(ROOT, ".env");
-    const existing = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
-    writeFileSync(envPath, mergeEnv(existing, updates));
-    console.log("\n✓ activated + wrote .env.");
+    if (Object.keys(updates).length) {
+      const envPath = join(ROOT, ".env");
+      const existing = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
+      writeFileSync(envPath, mergeEnv(existing, updates));
+      console.log("\n✓ activated + wrote .env.");
+    } else {
+      console.log("\n✓ activated.");
+    }
     console.log("Next: set up Slack (see README → Finish setup), then `vercel deploy`.");
   });
 }
