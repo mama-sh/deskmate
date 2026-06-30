@@ -15,6 +15,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, write
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
+import { mergeEnv } from "#scripts/env";
 import { renderMcpConnection } from "#scripts/mcp-template";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -209,6 +210,42 @@ async function mcpAdd(args: string[]): Promise<void> {
   });
 }
 
+async function init(): Promise<void> {
+  const library = listDir(LIBRARY);
+  if (library.length === 0) throw new Error("No deskmates in library/deskmates.");
+  console.log("Library deskmates:");
+  library.forEach((id, i) => console.log(`  ${i + 1}. ${id}`));
+  await withPrompts(async (ask) => {
+    const raw = await ask("Activate which? (comma-separated names or numbers)", "");
+    const ids = raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((p) => (/^\d+$/.test(p) ? library[Number(p) - 1] : p))
+      .filter((id): id is string => Boolean(id) && library.includes(id));
+    if (ids.length === 0) {
+      console.log("Nothing selected.");
+      return;
+    }
+    add(ids);
+    const updates: Record<string, string> = {};
+    for (const id of ids) {
+      for (const prov of readDeskmate(join(LIBRARY, id)).providers) {
+        const up = prov.toUpperCase();
+        const url = await ask(`${id}: ${prov} MCP URL`, "");
+        const token = await ask(`${id}: ${prov} MCP token`, "");
+        if (url) updates[`${up}_MCP_URL`] = url;
+        if (token) updates[`${up}_MCP_TOKEN`] = token;
+      }
+    }
+    const envPath = join(ROOT, ".env");
+    const existing = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
+    writeFileSync(envPath, mergeEnv(existing, updates));
+    console.log("\n✓ activated + wrote .env.");
+    console.log("Next: set up Slack (see README → Finish setup), then `vercel deploy`.");
+  });
+}
+
 const [command, ...ids] = process.argv.slice(2);
 switch (command) {
   case "add":
@@ -224,6 +261,9 @@ switch (command) {
     break;
   case "mcp-add":
     await mcpAdd(ids);
+    break;
+  case "init":
+    await init();
     break;
   default:
     console.log("usage: pnpm deskmate:(add|remove|list) [id...]");
