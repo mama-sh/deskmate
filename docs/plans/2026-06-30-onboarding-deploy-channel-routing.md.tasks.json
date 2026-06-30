@@ -1,13 +1,13 @@
 {
   "planPath": "docs/plans/2026-06-30-onboarding-deploy-channel-routing.md",
   "tasks": [
-    { "id": 1, "subject": "Task 1: Deploy build config (vercel.json)", "status": "pending" },
-    { "id": 2, "subject": "Task 2: renderMcpConnection template (TDD)", "status": "pending" },
-    { "id": 3, "subject": "Task 3: deskmate:mcp:add CLI", "status": "pending", "blockedBy": [2] },
-    { "id": 4, "subject": "Task 4: deskmate:init wizard + mergeEnv (TDD)", "status": "pending", "blockedBy": [3] },
-    { "id": 5, "subject": "Task 5: channel-routes + resolveRoute (TDD)", "status": "pending" },
-    { "id": 6, "subject": "Task 6: Slack channel routing wiring", "status": "pending", "blockedBy": [5] },
-    { "id": 7, "subject": "Task 7: Docs + final verification", "status": "pending", "blockedBy": [1, 3, 4, 6] }
+    { "id": 1, "subject": "Task 1: Deploy build config (vercel.json)", "status": "completed" },
+    { "id": 2, "subject": "Task 2: renderMcpConnection template (TDD)", "status": "completed" },
+    { "id": 3, "subject": "Task 3: deskmate:mcp:add CLI", "status": "completed", "blockedBy": [2] },
+    { "id": 4, "subject": "Task 4: deskmate:init wizard + mergeEnv (TDD)", "status": "completed", "blockedBy": [3] },
+    { "id": 5, "subject": "Task 5: channel-routes + resolveRoute (TDD)", "status": "completed" },
+    { "id": 6, "subject": "Task 6: Slack channel routing wiring", "status": "completed", "blockedBy": [5] },
+    { "id": 7, "subject": "Task 7: Docs + final verification", "status": "completed", "blockedBy": [1, 3, 4, 6] }
   ],
   "lastUpdated": "2026-06-30"
 }
