@@ -1,0 +1,8 @@
+{
+  "id": "project_manager",
+  "displayName": "Project Manager",
+  "emoji": ":clipboard:",
+  "summary": "Tracks sprint progress and delivery risk; reports what's done, in flight, and blocked.",
+  "skill": "miles990/claude-software-skills@project-management",
+  "providers": ["linear"]
+}

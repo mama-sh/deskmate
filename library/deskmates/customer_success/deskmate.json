@@ -1,0 +1,8 @@
+{
+  "id": "customer_success",
+  "displayName": "Customer Success Analyst",
+  "emoji": ":handshake:",
+  "summary": "Watches account health, churn risk, and renewals; flags accounts that need attention.",
+  "skill": "claude-office-skills/skills@customer-success",
+  "providers": ["intercom"]
+}

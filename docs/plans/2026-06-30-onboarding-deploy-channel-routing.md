@@ -1,0 +1,637 @@
+# Deploy button, onboarding & channel routing — Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers-extended-cc:executing-plans to implement this plan task-by-task.
+
+**Goal:** Add a one-click "Deploy to Vercel" button, a developer onboarding CLI (`deskmate:init` + `deskmate:mcp:add`), and Slack-channel→deskmate routing (default + optional lock) to the Deskmate app.
+
+**Architecture:** Single-deployment OSS layer (env-token auth). Connections are build-time files, so a custom MCP = generate a connection file + redeploy. Routing is done in the Slack `onAppMention` handler by injecting a `[routing]` directive (channel→deskmate map) the front-desk router honors. All pure logic is extracted and unit-tested.
+
+**Tech Stack:** Vercel Eve 0.17.1 · TypeScript (NodeNext) · Node 24 · pnpm · Zod · Vitest · Vercel (Connect for Slack).
+
+**Design doc:** `docs/plans/2026-06-30-onboarding-deploy-channel-routing-design.md`
+
+---
+
+## Prerequisites for the executor
+
+- **Node 24+ must be active.** This machine's default nvm is Node 22; activate 24 first (e.g. `nvm use 24`, or prepend `~/.nvm/versions/node/v24.18.0/bin` to `PATH`). All `pnpm`/`node` commands below assume Node 24.
+- Relative TS imports use explicit **`.js`** extensions (NodeNext). Tests import tool/lib source via `../<path>.js`; vitest resolves `.js`→`.ts`.
+- End every commit message with:
+  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
+- Verify gates after each code task: `pnpm typecheck` (clean), `pnpm test` (green), `pnpm build` (`.eve/agent-summary.json` diagnostics `{errors:0,warnings:0}`).
+
+---
+
+## Task 1: Deploy build config (`vercel.json`)
+
+Makes the "Deploy to Vercel" button (added in Task 7) build Eve correctly from source.
+
+**Files:**
+- Create: `vercel.json`
+
+**Step 1: Write the config**
+
+```json
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "eve build",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "build": {
+    "env": {
+      "VERCEL_USE_EXPERIMENTAL_FRAMEWORKS": "1"
+    }
+  }
+}
+```
+
+Rationale: Eve writes Vercel Build Output from `eve build`; `VERCEL_USE_EXPERIMENTAL_FRAMEWORKS=1` lets the hosted build recognize Eve as the framework (the same flag `eve deploy` sets). `framework` is intentionally omitted so Eve's build output drives detection.
+
+**Step 2: Verify local build is unaffected**
+
+Run: `pnpm build`
+Expected: build succeeds, `.eve/agent-summary.json` shows `{"errors":0,"warnings":0}` (vercel.json does not affect local `eve build`).
+
+**Step 3: Commit**
+
+```bash
+git add vercel.json
+git commit -m "feat: add vercel.json so the Deploy button builds eve from source"
+```
+
+> NOTE: `VERCEL_USE_EXPERIMENTAL_FRAMEWORKS` is currently the documented flag for Eve framework recognition. Confirm Eve still needs it on the first real Deploy-button run; if Eve graduates from experimental, drop the `build.env` block.
+
+---
+
+## Task 2: Custom-MCP connection template (`renderMcpConnection`) — TDD
+
+A pure function that renders the source of a read-only MCP connection file. Used by `deskmate:mcp:add` (Task 3).
+
+**Files:**
+- Test: `tests/mcp-template.test.ts`
+- Create: `scripts/lib/mcp-template.ts`
+
+**Step 1: Write the failing test**
+
+```ts
+import { describe, it, expect } from "vitest";
+import { renderMcpConnection } from "../scripts/lib/mcp-template.js";
+
+describe("renderMcpConnection", () => {
+  it("renders a read-only, env-token connection from options", () => {
+    const out = renderMcpConnection({
+      name: "datadog",
+      urlEnv: "DATADOG_MCP_URL",
+      tokenEnv: "DATADOG_MCP_TOKEN",
+      description: "Read-only Datadog: search logs and monitors.",
+      tools: ["search_logs", "get_monitor"],
+    });
+    expect(out).toContain('import { defineMcpClientConnection } from "eve/connections";');
+    expect(out).toContain("process.env.DATADOG_MCP_URL ?? \"https://example.invalid/mcp\"");
+    expect(out).toContain("process.env.DATADOG_MCP_TOKEN ?? \"\"");
+    expect(out).toContain('tools: { allow: ["search_logs", "get_monitor"] }');
+    expect(out).toContain("Read-only Datadog: search logs and monitors.");
+  });
+
+  it("renders an empty allow-list when no tools are given", () => {
+    const out = renderMcpConnection({
+      name: "x", urlEnv: "X_MCP_URL", tokenEnv: "X_MCP_TOKEN", description: "d", tools: [],
+    });
+    expect(out).toContain("tools: { allow: [] }");
+  });
+});
+```
+
+**Step 2: Run it, confirm it fails**
+
+Run: `pnpm test -- mcp-template`
+Expected: FAIL (module not found).
+
+**Step 3: Implement**
+
+```ts
+// scripts/lib/mcp-template.ts
+export type McpTemplateOptions = {
+  name: string;
+  urlEnv: string;
+  tokenEnv: string;
+  description: string;
+  tools: string[];
+};
+
+/** Pure: render the TypeScript source for a read-only, env-token MCP connection. */
+export function renderMcpConnection(opts: McpTemplateOptions): string {
+  const allow = opts.tools.map((t) => JSON.stringify(t)).join(", ");
+  return `import { defineMcpClientConnection } from "eve/connections";
+
+// Generated by \`pnpm deskmate:mcp:add\`. Read-only, env-token (single-deployment).
+// Set ${opts.urlEnv} + ${opts.tokenEnv} to run against a real server, then redeploy.
+export default defineMcpClientConnection({
+  url: process.env.${opts.urlEnv} ?? "https://example.invalid/mcp",
+  description: ${JSON.stringify(opts.description)},
+  auth: { getToken: async () => ({ token: process.env.${opts.tokenEnv} ?? "" }) },
+  tools: { allow: [${allow}] },
+});
+`;
+}
+```
+
+**Step 4: Run it, confirm it passes**
+
+Run: `pnpm test -- mcp-template`
+Expected: PASS.
+
+**Step 5: Commit**
+
+```bash
+git add tests/mcp-template.test.ts scripts/lib/mcp-template.ts
+git commit -m "feat: add renderMcpConnection template helper (tested)"
+```
+
+---
+
+## Task 3: `deskmate:mcp:add` CLI command
+
+Scaffolds a custom MCP connection into an active deskmate, using Task 2's template.
+
+**Files:**
+- Modify: `scripts/deskmate.ts` (add prompt helper, `appendEnvExample`, `mcpAdd`, and a `mcp-add` case)
+- Modify: `package.json` (add `deskmate:mcp:add` script)
+
+**Step 1: Add imports + helpers to `scripts/deskmate.ts`**
+
+At the top, alongside the existing `node:fs` import, add:
+
+```ts
+import { createInterface } from "node:readline/promises";
+import { renderMcpConnection } from "./lib/mcp-template.js";
+```
+
+Add these helpers (near the other functions):
+
+```ts
+async function withPrompts<T>(
+  fn: (ask: (q: string, fallback?: string) => Promise<string>) => Promise<T>,
+): Promise<T> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const ask = async (q: string, fallback?: string) => {
+    const a = (await rl.question(fallback ? `${q} [${fallback}]: ` : `${q}: `)).trim();
+    return a || fallback || "";
+  };
+  try {
+    return await fn(ask);
+  } finally {
+    rl.close();
+  }
+}
+
+function appendEnvExample(keys: string[]): void {
+  const path = join(ROOT, ".env.example");
+  let txt = existsSync(path) ? readFileSync(path, "utf8") : "";
+  for (const k of keys) {
+    if (!new RegExp(`^${k}=`, "m").test(txt)) {
+      txt += `${txt.length && !txt.endsWith("\n") ? "\n" : ""}${k}=\n`;
+    }
+  }
+  writeFileSync(path, txt);
+}
+
+async function mcpAdd(args: string[]): Promise<void> {
+  const name = args[0];
+  const toIdx = args.indexOf("--to");
+  const deskmate = toIdx >= 0 ? args[toIdx + 1] : undefined;
+  if (!name || !deskmate) throw new Error("usage: pnpm deskmate:mcp:add <name> --to <deskmate>");
+  const dest = join(SUBAGENTS, deskmate);
+  if (!existsSync(dest)) {
+    throw new Error(`${deskmate} is not active. Run \`pnpm deskmate:add ${deskmate}\` first.`);
+  }
+  const upper = name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+  await withPrompts(async (ask) => {
+    const urlEnv = await ask("URL env var", `${upper}_MCP_URL`);
+    const tokenEnv = await ask("Token env var", `${upper}_MCP_TOKEN`);
+    const description = await ask("Description (for the model)", `Read-only ${name} MCP.`);
+    const toolsRaw = await ask("Read tools (comma-separated)", "");
+    const tools = toolsRaw.split(",").map((t) => t.trim()).filter(Boolean);
+    const file = join(dest, "connections", `${name}.ts`);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, renderMcpConnection({ name, urlEnv, tokenEnv, description, tools }));
+    appendEnvExample([urlEnv, tokenEnv]);
+    console.log(`✓ created ${file}`);
+    console.log(`  set ${urlEnv} + ${tokenEnv} in your env, then redeploy.`);
+  });
+}
+```
+
+**Step 2: Wire the command**
+
+In the `switch (command)` block, add a case (note: top-level `await` is allowed — this file is ESM):
+
+```ts
+  case "mcp-add":
+    await mcpAdd(ids);
+    break;
+```
+
+**Step 3: Add the pnpm script**
+
+In `package.json` scripts, after `deskmate:list`:
+
+```json
+    "deskmate:mcp:add": "node scripts/deskmate.ts mcp-add",
+```
+
+**Step 4: Verify end-to-end (generate → typecheck → build → clean up)**
+
+Run:
+```bash
+printf '\n\n\nsearch_logs, get_monitor\n' | pnpm deskmate:mcp:add datadog --to devops
+cat agent/subagents/devops/connections/datadog.ts
+pnpm typecheck && pnpm build 2>&1 | tail -2
+```
+Expected: a `datadog.ts` connection is generated (defaults accepted via blank prompts), `.env.example` gains `DATADOG_MCP_URL`/`DATADOG_MCP_TOKEN`, typecheck clean, build `{errors:0,warnings:0}`.
+
+Then revert the throwaway artifact so the repo state is clean:
+```bash
+rm agent/subagents/devops/connections/datadog.ts
+git checkout .env.example
+```
+
+**Step 5: Commit**
+
+```bash
+git add scripts/deskmate.ts package.json
+git commit -m "feat: add deskmate:mcp:add CLI to scaffold custom MCP connections"
+```
+
+---
+
+## Task 4: `mergeEnv` helper (TDD) + `deskmate:init` wizard
+
+**Files:**
+- Test: `tests/env.test.ts`
+- Create: `scripts/lib/env.ts`
+- Modify: `scripts/deskmate.ts` (add `init`, wire `init` case, import `mergeEnv`)
+- Modify: `package.json` (add `deskmate:init` script)
+
+**Step 1: Write the failing test**
+
+```ts
+import { describe, it, expect } from "vitest";
+import { mergeEnv } from "../scripts/lib/env.js";
+
+describe("mergeEnv", () => {
+  it("appends new keys with a trailing newline", () => {
+    expect(mergeEnv("", { A: "1" })).toBe("A=1\n");
+    expect(mergeEnv("A=1", { B: "2" })).toBe("A=1\nB=2\n");
+  });
+  it("replaces an existing key in place, leaving others", () => {
+    expect(mergeEnv("A=old\nB=2\n", { A: "new" })).toBe("A=new\nB=2\n");
+  });
+});
+```
+
+**Step 2: Run it, confirm it fails**
+
+Run: `pnpm test -- env`
+Expected: FAIL (module not found).
+
+**Step 3: Implement**
+
+```ts
+// scripts/lib/env.ts
+/** Pure: merge KEY=VALUE updates into existing .env text, replacing in place or appending. */
+export function mergeEnv(existing: string, updates: Record<string, string>): string {
+  let out = existing;
+  for (const [k, v] of Object.entries(updates)) {
+    const line = `${k}=${v}`;
+    const re = new RegExp(`^${k}=.*$`, "m");
+    if (re.test(out)) {
+      out = out.replace(re, line);
+    } else {
+      out += `${out.length && !out.endsWith("\n") ? "\n" : ""}${line}\n`;
+    }
+  }
+  return out;
+}
+```
+
+**Step 4: Run it, confirm it passes**
+
+Run: `pnpm test -- env`
+Expected: PASS.
+
+**Step 5: Add the `init` wizard to `scripts/deskmate.ts`**
+
+Add the import:
+
+```ts
+import { mergeEnv } from "./lib/env.js";
+```
+
+Add the function:
+
+```ts
+async function init(): Promise<void> {
+  const library = listDir(LIBRARY);
+  if (library.length === 0) throw new Error("No deskmates in library/deskmates.");
+  console.log("Library deskmates:");
+  library.forEach((id, i) => console.log(`  ${i + 1}. ${id}`));
+  await withPrompts(async (ask) => {
+    const raw = await ask("Activate which? (comma-separated names or numbers)", "");
+    const ids = raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((p) => (/^\d+$/.test(p) ? library[Number(p) - 1] : p))
+      .filter((id): id is string => Boolean(id) && library.includes(id));
+    if (ids.length === 0) {
+      console.log("Nothing selected.");
+      return;
+    }
+    add(ids);
+    const updates: Record<string, string> = {};
+    for (const id of ids) {
+      for (const prov of readDeskmate(join(LIBRARY, id)).providers) {
+        const up = prov.toUpperCase();
+        const url = await ask(`${id}: ${prov} MCP URL`, "");
+        const token = await ask(`${id}: ${prov} MCP token`, "");
+        if (url) updates[`${up}_MCP_URL`] = url;
+        if (token) updates[`${up}_MCP_TOKEN`] = token;
+      }
+    }
+    const envPath = join(ROOT, ".env");
+    const existing = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
+    writeFileSync(envPath, mergeEnv(existing, updates));
+    console.log("\n✓ activated + wrote .env.");
+    console.log("Next: set up Slack (see README → Finish setup), then `vercel deploy`.");
+  });
+}
+```
+
+Add the case to the switch:
+
+```ts
+  case "init":
+    await init();
+    break;
+```
+
+**Step 6: Add the pnpm script**
+
+In `package.json`, after `deskmate:mcp:add`:
+
+```json
+    "deskmate:init": "node scripts/deskmate.ts init",
+```
+
+**Step 7: Verify (non-destructive: pick nothing)**
+
+Run: `printf '\n' | pnpm deskmate:init`
+Expected: lists the 5 library deskmates, "Nothing selected." on empty input, exits 0. Then `git status` shows no unintended changes (no `.env` written when nothing selected).
+
+**Step 8: Commit**
+
+```bash
+git add tests/env.test.ts scripts/lib/env.ts scripts/deskmate.ts package.json
+git commit -m "feat: add deskmate:init onboarding wizard with mergeEnv (tested)"
+```
+
+---
+
+## Task 5: Channel routes config + `resolveRoute` (TDD)
+
+**Files:**
+- Test: `tests/channel-routes.test.ts`
+- Create: `agent/lib/channel-routes.ts`
+
+**Step 1: Write the failing test**
+
+```ts
+import { describe, it, expect } from "vitest";
+import { resolveRoute } from "../agent/lib/channel-routes.js";
+
+const routes = {
+  incidents: { deskmate: "devops", lock: true },
+  growth: { deskmate: "growth_hacker" },
+  C0FIXEDID: { deskmate: "product_analyst" },
+};
+
+describe("resolveRoute", () => {
+  it("resolves a locked channel by name", () => {
+    expect(resolveRoute({ name: "incidents" }, routes)).toEqual({ deskmate: "devops", lock: true });
+  });
+  it("defaults lock to false", () => {
+    expect(resolveRoute({ name: "growth" }, routes)).toEqual({ deskmate: "growth_hacker", lock: false });
+  });
+  it("resolves by channel id", () => {
+    expect(resolveRoute({ id: "C0FIXEDID" }, routes)).toEqual({ deskmate: "product_analyst", lock: false });
+  });
+  it("returns null for an unmapped channel", () => {
+    expect(resolveRoute({ name: "random", id: "Cxxx" }, routes)).toBeNull();
+  });
+});
+```
+
+**Step 2: Run it, confirm it fails**
+
+Run: `pnpm test -- channel-routes`
+Expected: FAIL (module not found).
+
+**Step 3: Implement**
+
+```ts
+// agent/lib/channel-routes.ts
+//
+// Map a Slack channel to the deskmate that should handle it.
+// Key by channel id (the Cxxxx from the channel's "Copy link") — always available
+// on the inbound event. Channel *names* also work IF you resolve name->id yourself
+// (needs the channels:read scope); the resolver accepts either.
+//
+// `lock: true` makes that deskmate the ONLY one reachable in the channel
+// (instruction-enforced — see agent/channels/slack.ts). Omit it for a soft default.
+export type ChannelRoute = { deskmate: string; lock?: boolean };
+
+export const CHANNEL_ROUTES: Record<string, ChannelRoute> = {
+  // "C0123INCIDENTS": { deskmate: "devops", lock: true },
+  // "C0456GROWTH": { deskmate: "growth_hacker" },
+};
+
+export type ResolvedRoute = { deskmate: string; lock: boolean };
+
+/** Resolve a channel (by name or id) to its route, or null when unmapped. */
+export function resolveRoute(
+  channel: { name?: string; id?: string },
+  routes: Record<string, ChannelRoute> = CHANNEL_ROUTES,
+): ResolvedRoute | null {
+  const key =
+    (channel.name && routes[channel.name] ? channel.name : undefined) ??
+    (channel.id && routes[channel.id] ? channel.id : undefined);
+  if (!key) return null;
+  return { deskmate: routes[key].deskmate, lock: routes[key].lock ?? false };
+}
+```
+
+**Step 4: Run it, confirm it passes**
+
+Run: `pnpm test -- channel-routes`
+Expected: PASS.
+
+**Step 5: Commit**
+
+```bash
+git add tests/channel-routes.test.ts agent/lib/channel-routes.ts
+git commit -m "feat: add channel->deskmate route config + resolveRoute (tested)"
+```
+
+---
+
+## Task 6: Slack routing wiring (context injection) + router rule
+
+Inject a `[routing]` directive into the turn when the inbound channel maps to a deskmate, and teach the front desk to honor it.
+
+**Files:**
+- Modify: `agent/channels/slack.ts`
+- Modify: `agent/instructions.md`
+
+**Step 1: Wire `onAppMention` in `agent/channels/slack.ts`**
+
+Replace the file body with (keep the existing top comment block):
+
+```ts
+import { connectSlackCredentials } from "@vercel/connect/eve";
+import { defaultSlackAuth, slackChannel } from "eve/channels/slack";
+import { resolveRoute } from "../lib/channel-routes.js";
+
+export default slackChannel({
+  credentials: connectSlackCredentials(process.env.SLACK_CONNECTOR ?? "slack/deskmate"),
+  onAppMention: (ctx, message) => {
+    const auth = defaultSlackAuth(message, ctx);
+    const route = resolveRoute({ id: message.channelId });
+    if (!route) return { auth };
+    const directive = route.lock
+      ? `[routing] This Slack channel is dedicated to the \`${route.deskmate}\` deskmate. ` +
+        `Delegate ONLY to \`${route.deskmate}\`. If the request is outside their role, say so ` +
+        `rather than delegating to anyone else.`
+      : `[routing] This Slack channel maps to the \`${route.deskmate}\` deskmate. Delegate to ` +
+        `\`${route.deskmate}\` by default, unless the user explicitly names a different deskmate.`;
+    return { auth, context: [directive] };
+  },
+});
+```
+
+**Step 2: Teach the front desk to honor it**
+
+In `agent/instructions.md`, append a rule under "# Routing rules":
+
+```markdown
+5. If a message contains a `[routing]` directive naming a deskmate, treat it as
+   authoritative for this channel: delegate as it says. A "dedicated" directive
+   means delegate only to that deskmate.
+```
+
+**Step 3: Verify the manifest still compiles**
+
+Run: `pnpm typecheck && pnpm build 2>&1 | tail -2`
+Expected: typecheck clean; build `{errors:0,warnings:0}`. (Slack behavior itself is verified post-deploy — Slack can't be exercised locally.)
+
+**Step 4: Commit**
+
+```bash
+git add agent/channels/slack.ts agent/instructions.md
+git commit -m "feat: route Slack channels to a deskmate via context injection (default + lock)"
+```
+
+> Channel routing is **instruction-enforced** (the front-desk model honors the directive), not a hard mechanical wall — Eve does not cleanly hide authored subagent tools per channel. This is the intended OSS-layer trade-off.
+
+---
+
+## Task 7: Docs (Deploy button + Finish-setup runbook + feature sections) + final verification
+
+**Files:**
+- Modify: `README.md`
+- Modify: `.env.example` (only if Task 3/4 cleanup removed needed keys — usually no change)
+
+**Step 1: Add the Deploy button at the top of `README.md`**
+
+Just under the `# Deskmate` title and tagline, add:
+
+```markdown
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdeskmate%2Fdeskmate&project-name=deskmate&repository-name=deskmate&env=AI_GATEWAY_API_KEY&envDescription=Optional%3A%20model%20access%20%28OIDC%20also%20works%20once%20linked%29)
+
+> The button forks this repo, creates a Vercel project, and builds it. Model access
+> works via project OIDC (AI Gateway). It does **not** set up Slack or MCP tools —
+> finish those below. Requires the repo to be public at `github.com/deskmate`.
+```
+
+**Step 2: Replace the "Manage your team" + "Slack setup" sections with the onboarding flow**
+
+Add a **"Finish setup (after deploy)"** section documenting the runbook:
+
+```markdown
+## Finish setup (after deploy)
+
+```bash
+vercel link && vercel env pull        # connect this checkout to the deployed project
+pnpm deskmate:init                    # pick deskmates to activate + enter their MCP URLs/tokens
+pnpm deskmate:mcp:add <name> --to <deskmate>   # (optional) add a custom MCP to a deskmate
+# Slack (Vercel Connect):
+export FF_CONNECT_ENABLED=1
+vercel connect create slack --triggers
+vercel connect detach <uid> --yes
+vercel connect attach <uid> --triggers --trigger-path /eve/v1/slack --yes
+vercel deploy                         # redeploy so activated deskmates + MCPs go live
+```
+
+Custom MCPs are build-time: `deskmate:mcp:add` generates a connection file, then you
+redeploy. They can't be added to a running bot.
+```
+
+**Step 3: Document channel routing**
+
+Add a **"Route channels to a deskmate"** section:
+
+```markdown
+## Route channels to a deskmate
+
+Map a Slack channel to a deskmate in `agent/lib/channel-routes.ts`:
+
+```ts
+export const CHANNEL_ROUTES = {
+  C0123INCIDENTS: { deskmate: "devops", lock: true }, // only devops here
+  C0456GROWTH:    { deskmate: "growth_hacker" },       // default; others still reachable
+};
+```
+
+Key by channel id (Slack → channel → "Copy link" → the `Cxxxx`). In a mapped channel
+the front desk routes to that deskmate; `lock: true` restricts the channel to it.
+Unmapped channels and DMs use normal routing. (Enforcement is instruction-level.)
+```
+
+**Step 4: Final verification**
+
+Run:
+```bash
+pnpm typecheck && pnpm test && pnpm build 2>&1 | tail -2
+```
+Expected: typecheck clean; all tests pass (mcp-template, env, channel-routes added — ~20 tests across 9 files); build `{errors:0,warnings:0}`.
+
+**Step 5: Commit**
+
+```bash
+git add README.md .env.example
+git commit -m "docs: deploy button, finish-setup runbook, custom-MCP + channel-routing"
+```
+
+---
+
+## Definition of done
+- `pnpm typecheck`, `pnpm test`, `pnpm build` all green.
+- `vercel.json` present; README has a working Deploy button + finish-setup runbook.
+- `pnpm deskmate:init` activates deskmates and writes `.env`; `pnpm deskmate:mcp:add` scaffolds a read-only custom MCP connection into a deskmate.
+- `agent/lib/channel-routes.ts` + `resolveRoute` (tested); Slack `onAppMention` injects a `[routing]` directive (default + lock); the router honors it.
+- New pure logic (`renderMcpConnection`, `mergeEnv`, `resolveRoute`) is unit-tested.
+
+## Risks / confirm during build
+1. **Deploy button + experimental frameworks flag** (Task 1) — verify Eve framework recognition on a real Deploy-button build; adjust `vercel.json` if Eve graduated from experimental.
+2. **Channel name vs id** (Task 5/6) — default wiring routes by channel **id**. Name-keyed config needs a `conversations.info` lookup + `channels:read` scope; left as a documented extension.
+3. **Lock is instruction-enforced** (Task 6), not mechanical — acceptable for the OSS layer; a hard guarantee is a hosted-layer follow-up.
+```

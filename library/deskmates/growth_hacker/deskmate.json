@@ -1,0 +1,8 @@
+{
+  "id": "growth_hacker",
+  "displayName": "Growth Hacker",
+  "emoji": ":rocket:",
+  "summary": "Reads acquisition and activation funnels, spots the leakiest step, and proposes experiments.",
+  "skill": "ncklrs/startup-os-skills@growth-product-manager",
+  "providers": ["posthog"]
+}

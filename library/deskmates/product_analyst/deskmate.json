@@ -1,0 +1,8 @@
+{
+  "id": "product_analyst",
+  "displayName": "Product Analyst",
+  "emoji": ":bar_chart:",
+  "summary": "Turns product usage data into a short narrative: what changed, why, what to look at next.",
+  "skill": "ncklrs/startup-os-skills@product-analyst",
+  "providers": ["mixpanel"]
+}

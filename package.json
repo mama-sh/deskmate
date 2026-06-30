@@ -10,8 +10,13 @@
     "build": "eve build",
     "dev": "eve dev",
     "start": "eve start",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "deskmate:add": "node scripts/deskmate.ts add",
+    "deskmate:remove": "node scripts/deskmate.ts remove",
+    "deskmate:list": "node scripts/deskmate.ts list"
   },
+  "packageManager": "pnpm@10.28.2",
   "dependencies": {
     "@vercel/connect": "0.2.2",
     "ai": "^7.0.0",
@@ -20,7 +25,8 @@
   },
   "devDependencies": {
     "@types/node": "24.x",
-    "typescript": "7.0.1-rc"
+    "typescript": "7.0.1-rc",
+    "vitest": "^4.1.9"
   },
   "overrides": {
     "ai": "^7.0.0"
@@ -28,5 +34,4 @@
   "engines": {
     "node": "24.x"
   }
-
 }

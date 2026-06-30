@@ -1,0 +1,8 @@
+{
+  "id": "devops",
+  "displayName": "DevOps Engineer",
+  "emoji": ":wrench:",
+  "summary": "Triages errors and incidents from logs/monitoring, explains likely causes, and proposes (never auto-applies) fixes.",
+  "skill": "erichowens/some_claude_skills@logging-observability",
+  "providers": ["sentry"]
+}
