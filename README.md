@@ -7,11 +7,11 @@ deployment. Summon them by tagging **`@deskmate`**; a front-desk router hands th
 request to the right deskmate, which answers from your data over MCP. Every
 **write** waits for a human to approve it in the Slack thread.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdeskmate%2Fdeskmate&project-name=deskmate&repository-name=deskmate&env=AI_GATEWAY_API_KEY&envDescription=Optional%3A%20model%20access%20%28OIDC%20also%20works%20once%20linked%29)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmama-sh%2Fdeskmate&project-name=deskmate&repository-name=deskmate&env=AI_GATEWAY_API_KEY&envDescription=Optional%3A%20model%20access%20%28OIDC%20also%20works%20once%20linked%29)
 
 > The button forks this repo, creates a Vercel project, and builds it. Model access
 > works via project OIDC (AI Gateway). It does **not** set up Slack or MCP tools —
-> finish those below. Requires the repo to be public at `github.com/deskmate`.
+> finish those below. Requires a public repo — this one lives at `github.com/mama-sh/deskmate`.
 
 Pick deskmates from a built-in **library**, or author your own.
 
@@ -69,7 +69,7 @@ with `pnpm deskmate:add <id>`.
 ## Quickstart
 
 ```bash
-git clone https://github.com/deskmate/deskmate && cd deskmate
+git clone https://github.com/mama-sh/deskmate && cd deskmate
 pnpm install            # Node 24+ required
 pnpm test               # 14 unit tests over the tool logic
 pnpm deskmate:list      # see the library; • marks active deskmates
