@@ -15,7 +15,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, write
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
-import { mergeEnv } from "#scripts/env";
+import { escapeRegExp, mergeEnv } from "#scripts/env";
 import { renderMcpConnection } from "#scripts/mcp-template";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -178,7 +178,7 @@ function appendEnvExample(keys: string[]): void {
   const path = join(ROOT, ".env.example");
   let txt = existsSync(path) ? readFileSync(path, "utf8") : "";
   for (const k of keys) {
-    if (!new RegExp(`^${k}=`, "m").test(txt)) {
+    if (!new RegExp(`^${escapeRegExp(k)}=`, "m").test(txt)) {
       txt += `${txt.length && !txt.endsWith("\n") ? "\n" : ""}${k}=\n`;
     }
   }
@@ -190,6 +190,9 @@ async function mcpAdd(args: string[]): Promise<void> {
   const toIdx = args.indexOf("--to");
   const deskmate = toIdx >= 0 ? args[toIdx + 1] : undefined;
   if (!name || !deskmate) throw new Error("usage: pnpm deskmate:mcp:add <name> --to <deskmate>");
+  if (!/^[a-z][a-z0-9_]*$/.test(name)) {
+    throw new Error("<name> must be a snake_case identifier (lowercase letter, then letters/digits/underscores).");
+  }
   const dest = join(SUBAGENTS, deskmate);
   if (!existsSync(dest)) {
     throw new Error(`${deskmate} is not active. Run \`pnpm deskmate:add ${deskmate}\` first.`);
@@ -270,6 +273,9 @@ switch (command) {
     await init();
     break;
   default:
-    console.log("usage: pnpm deskmate:(add|remove|list) [id...]");
+    console.log(
+      "usage: pnpm deskmate:(add|remove|list|init) [id...]\n" +
+        "       pnpm deskmate:mcp:add <name> --to <deskmate>",
+    );
     process.exitCode = command ? 1 : 0;
 }

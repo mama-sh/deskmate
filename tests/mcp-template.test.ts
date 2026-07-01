@@ -11,8 +11,8 @@ describe("renderMcpConnection", () => {
       tools: ["search_logs", "get_monitor"],
     });
     expect(out).toContain('import { defineMcpClientConnection } from "eve/connections";');
-    expect(out).toContain("process.env.DATADOG_MCP_URL ?? \"https://example.invalid/mcp\"");
-    expect(out).toContain("process.env.DATADOG_MCP_TOKEN ?? \"\"");
+    expect(out).toContain("process.env[\"DATADOG_MCP_URL\"] ?? \"https://example.invalid/mcp\"");
+    expect(out).toContain("process.env[\"DATADOG_MCP_TOKEN\"] ?? \"\"");
     expect(out).toContain('tools: { allow: ["search_logs", "get_monitor"] }');
     expect(out).toContain("Read-only Datadog: search logs and monitors.");
   });

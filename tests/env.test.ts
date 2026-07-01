@@ -9,6 +9,10 @@ describe("mergeEnv", () => {
   it("replaces an existing key in place, leaving others", () => {
     expect(mergeEnv("A=old\nB=2\n", { A: "new" })).toBe("A=new\nB=2\n");
   });
+  it("treats regex metacharacters in keys literally (no false matches)", () => {
+    // Unescaped, `^A.B=` would match "AXB=" first and replace the wrong line.
+    expect(mergeEnv("AXB=keep\nA.B=1\n", { "A.B": "2" })).toBe("AXB=keep\nA.B=2\n");
+  });
   it("preserves $ in values (secrets) on both append and replace paths", () => {
     // Append path (concatenation) is already safe; replace path must not treat
     // the value as a regex replacement string ($&, $$, $1 are special there).

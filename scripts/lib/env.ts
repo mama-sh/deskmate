@@ -1,9 +1,14 @@
+/** Escape a string so it is matched literally inside a RegExp. */
+export function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Pure: merge KEY=VALUE updates into existing .env text, replacing in place or appending. */
 export function mergeEnv(existing: string, updates: Record<string, string>): string {
   let out = existing;
   for (const [k, v] of Object.entries(updates)) {
     const line = `${k}=${v}`;
-    const re = new RegExp(`^${k}=.*$`, "m");
+    const re = new RegExp(`^${escapeRegExp(k)}=.*$`, "m");
     if (re.test(out)) {
       // Function replacement: a string here would interpret $-specials ($&, $$, $1)
       // and corrupt secret values that contain them.
