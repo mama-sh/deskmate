@@ -7,6 +7,12 @@ deployment. Summon them by tagging **`@deskmate`**; a front-desk router hands th
 request to the right deskmate, which answers from your data over MCP. Every
 **write** waits for a human to approve it in the Slack thread.
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmama-sh%2Fdeskmate&project-name=deskmate&repository-name=deskmate&env=AI_GATEWAY_API_KEY&envDescription=Optional%3A%20model%20access%20%28OIDC%20also%20works%20once%20linked%29)
+
+> The button forks this repo, creates a Vercel project, and builds it. Model access
+> works via project OIDC (AI Gateway). It does **not** set up Slack or MCP tools —
+> finish those below. Requires a public repo — this one lives at `github.com/mama-sh/deskmate`.
+
 Pick deskmates from a built-in **library**, or author your own.
 
 ---
@@ -63,7 +69,7 @@ with `pnpm deskmate:add <id>`.
 ## Quickstart
 
 ```bash
-git clone https://github.com/deskmate/deskmate && cd deskmate
+git clone https://github.com/mama-sh/deskmate && cd deskmate
 pnpm install            # Node 24+ required
 pnpm test               # 14 unit tests over the tool logic
 pnpm deskmate:list      # see the library; • marks active deskmates
@@ -82,24 +88,35 @@ curl -s -X POST http://127.0.0.1:3000/eve/v1/session \
   -d '{"message":"how are signups doing this week?"}' -i | grep -i x-eve-session-id
 ```
 
-## Slack setup
+## Finish setup (after deploy)
 
-Slack reaches the **deployed** project through [Vercel
-Connect](https://vercel.com/docs/connect) — there is no `SLACK_BOT_TOKEN` or
-signing secret to manage. After `eve deploy`:
+The Deploy button gets you a built project with model access. Connect Slack and
+activate the deskmates you want from this checkout. Slack reaches the **deployed**
+project through [Vercel Connect](https://vercel.com/docs/connect) — there is no
+`SLACK_BOT_TOKEN` or signing secret to manage.
 
 ```bash
-npm install -g vercel@latest && export FF_CONNECT_ENABLED=1
+vercel link && vercel env pull        # connect this checkout to the deployed project
+pnpm deskmate:init                    # pick deskmates to activate + enter their MCP URLs/tokens
+pnpm deskmate:mcp:add <name> --to <deskmate>   # (optional) add a custom MCP to a deskmate
+# Slack (Vercel Connect):
+export FF_CONNECT_ENABLED=1
 vercel connect create slack --triggers
 vercel connect detach <uid> --yes
 vercel connect attach <uid> --triggers --trigger-path /eve/v1/slack --yes
+vercel deploy                         # redeploy so activated deskmates + MCPs go live
 ```
 
-This sets `SLACK_CONNECTOR` and points Slack events at Deskmate's
-`/eve/v1/slack` route. Install the app as **Deskmate**, invite the bot to a
-channel, and tag `@deskmate`.
+This sets `SLACK_CONNECTOR` and points Slack events at Deskmate's `/eve/v1/slack`
+route. Install the app as **Deskmate**, invite the bot to a channel, and tag
+`@deskmate`. Custom MCPs are build-time: `deskmate:mcp:add` generates a connection
+file, then you redeploy. They can't be added to a running bot.
 
 ## Manage your team
+
+`pnpm deskmate:init` is the guided way to activate deskmates and set their MCP env
+in one go (see [Finish setup](#finish-setup-after-deploy)). The manual commands
+below still work for one-off changes:
 
 ```bash
 pnpm deskmate:list                       # library + which deskmates are active
@@ -129,6 +146,21 @@ Writes get a human gate by adding `approval: always()` (from `eve/tools/approval
 to the tool. Then `pnpm deskmate:add <id>`. The front desk needs no edits — it
 discovers each deskmate from its `description`.
 
+## Route channels to a deskmate
+
+Map a Slack channel to a deskmate in `agent/lib/channel-routes.ts`:
+
+```ts
+export const CHANNEL_ROUTES = {
+  C0123INCIDENTS: { deskmate: "devops", lock: true }, // only devops here
+  C0456GROWTH:    { deskmate: "growth_hacker" },       // default; others still reachable
+};
+```
+
+Key by channel id (Slack → channel → "Copy link" → the `Cxxxx`). In a mapped channel
+the front desk routes to that deskmate; `lock: true` restricts the channel to it.
+Unmapped channels and DMs use normal routing. (Enforcement is instruction-level.)
+
 ## Human-in-the-loop
 
 Reads run free. Any tool with `approval: always()` pauses before it runs and Eve
@@ -154,12 +186,13 @@ and reports the result; on reject it never runs. The example is the DevOps
 
 ## Scope
 
-This repo is the **single-organization OSS core** of Deskmate. Multi-organization
-tenancy, a per-tenant secret vault, a signup/control-plane/dashboard, an
-onboarding wizard, billing, and one-click provisioning are intentionally **not**
-here — they belong to a separate hosted layer. The seams that make that layer
-additive are already present: connections resolve auth per call, and deskmates
-are a data-driven library.
+This repo is the **single-organization OSS core** of Deskmate. It ships a one-click
+Deploy button and a local `deskmate:init` onboarding CLI for **your own** deployment.
+What's intentionally **not** here is the *hosted* layer: multi-organization tenancy, a
+per-tenant secret vault, a no-code/Slack-driven onboarding wizard that connects each
+company's tools, a signup/control-plane/dashboard, billing, and per-tenant
+provisioning. The seams that make that layer additive are already present: connections
+resolve auth per call, and deskmates are a data-driven library.
 
 ## Links
 

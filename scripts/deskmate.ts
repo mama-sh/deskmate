@@ -13,7 +13,10 @@
  */
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
+import { escapeRegExp, mergeEnv } from "#scripts/env";
+import { renderMcpConnection } from "#scripts/mcp-template";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const LIBRARY = join(ROOT, "library", "deskmates");
@@ -133,6 +136,123 @@ function list(): void {
   }
 }
 
+async function withPrompts<T>(
+  fn: (ask: (q: string, fallback?: string) => Promise<string>) => Promise<T>,
+): Promise<T> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  // Buffer lines instead of using rl.question(): piped stdin can emit every line
+  // before later prompts attach a listener (dropping them), and rl.question()
+  // hangs forever once stdin closes. Buffering + resolving to "" on close keeps
+  // both interactive and scripted (e.g. `printf … | …`) input working, falling
+  // back to each prompt's default when input runs out.
+  const buffered: string[] = [];
+  const waiting: Array<(line: string | null) => void> = [];
+  let closed = false;
+  rl.on("line", (line) => {
+    const next = waiting.shift();
+    if (next) next(line);
+    else buffered.push(line);
+  });
+  rl.on("close", () => {
+    closed = true;
+    for (const next of waiting.splice(0)) next(null);
+  });
+  const nextLine = (): Promise<string | null> => {
+    if (buffered.length) return Promise.resolve(buffered.shift() ?? null);
+    if (closed) return Promise.resolve(null);
+    return new Promise((resolve) => waiting.push(resolve));
+  };
+  const ask = async (q: string, fallback?: string) => {
+    process.stdout.write(fallback ? `${q} [${fallback}]: ` : `${q}: `);
+    const a = ((await nextLine()) ?? "").trim();
+    return a || fallback || "";
+  };
+  try {
+    return await fn(ask);
+  } finally {
+    rl.close();
+  }
+}
+
+function appendEnvExample(keys: string[]): void {
+  const path = join(ROOT, ".env.example");
+  let txt = existsSync(path) ? readFileSync(path, "utf8") : "";
+  for (const k of keys) {
+    if (!new RegExp(`^${escapeRegExp(k)}=`, "m").test(txt)) {
+      txt += `${txt.length && !txt.endsWith("\n") ? "\n" : ""}${k}=\n`;
+    }
+  }
+  writeFileSync(path, txt);
+}
+
+async function mcpAdd(args: string[]): Promise<void> {
+  const name = args[0];
+  const toIdx = args.indexOf("--to");
+  const deskmate = toIdx >= 0 ? args[toIdx + 1] : undefined;
+  if (!name || !deskmate) throw new Error("usage: pnpm deskmate:mcp:add <name> --to <deskmate>");
+  if (!/^[a-z][a-z0-9_]*$/.test(name)) {
+    throw new Error("<name> must be a snake_case identifier (lowercase letter, then letters/digits/underscores).");
+  }
+  const dest = join(SUBAGENTS, deskmate);
+  if (!existsSync(dest)) {
+    throw new Error(`${deskmate} is not active. Run \`pnpm deskmate:add ${deskmate}\` first.`);
+  }
+  const upper = name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+  await withPrompts(async (ask) => {
+    const urlEnv = await ask("URL env var", `${upper}_MCP_URL`);
+    const tokenEnv = await ask("Token env var", `${upper}_MCP_TOKEN`);
+    const description = await ask("Description (for the model)", `Read-only ${name} MCP.`);
+    const toolsRaw = await ask("Read tools (comma-separated)", "");
+    const tools = toolsRaw.split(",").map((t) => t.trim()).filter(Boolean);
+    const file = join(dest, "connections", `${name}.ts`);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, renderMcpConnection({ name, urlEnv, tokenEnv, description, tools }));
+    appendEnvExample([urlEnv, tokenEnv]);
+    console.log(`✓ created ${file}`);
+    console.log(`  set ${urlEnv} + ${tokenEnv} in your env, then redeploy.`);
+  });
+}
+
+async function init(): Promise<void> {
+  const library = listDir(LIBRARY);
+  if (library.length === 0) throw new Error("No deskmates in library/deskmates.");
+  console.log("Library deskmates:");
+  library.forEach((id, i) => console.log(`  ${i + 1}. ${id}`));
+  await withPrompts(async (ask) => {
+    const raw = await ask("Activate which? (comma-separated names or numbers)", "");
+    const ids = raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((p) => (/^\d+$/.test(p) ? library[Number(p) - 1] : p))
+      .filter((id): id is string => Boolean(id) && library.includes(id));
+    if (ids.length === 0) {
+      console.log("Nothing selected.");
+      return;
+    }
+    add(ids);
+    const updates: Record<string, string> = {};
+    for (const id of ids) {
+      for (const prov of readDeskmate(join(LIBRARY, id)).providers) {
+        const up = prov.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+        const url = await ask(`${id}: ${prov} MCP URL`, "");
+        const token = await ask(`${id}: ${prov} MCP token`, "");
+        if (url) updates[`${up}_MCP_URL`] = url;
+        if (token) updates[`${up}_MCP_TOKEN`] = token;
+      }
+    }
+    if (Object.keys(updates).length) {
+      const envPath = join(ROOT, ".env");
+      const existing = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
+      writeFileSync(envPath, mergeEnv(existing, updates));
+      console.log("\n✓ activated + wrote .env.");
+    } else {
+      console.log("\n✓ activated.");
+    }
+    console.log("Next: set up Slack (see README → Finish setup), then `vercel deploy`.");
+  });
+}
+
 const [command, ...ids] = process.argv.slice(2);
 switch (command) {
   case "add":
@@ -146,7 +266,16 @@ switch (command) {
   case "list":
     list();
     break;
+  case "mcp-add":
+    await mcpAdd(ids);
+    break;
+  case "init":
+    await init();
+    break;
   default:
-    console.log("usage: pnpm deskmate:(add|remove|list) [id...]");
+    console.log(
+      "usage: pnpm deskmate:(add|remove|list|init) [id...]\n" +
+        "       pnpm deskmate:mcp:add <name> --to <deskmate>",
+    );
     process.exitCode = command ? 1 : 0;
 }

@@ -1,5 +1,6 @@
 import { connectSlackCredentials } from "@vercel/connect/eve";
-import { slackChannel } from "eve/channels/slack";
+import { defaultSlackAuth, slackChannel } from "eve/channels/slack";
+import { resolveRoute } from "../lib/channel-routes.js";
 
 // Slack surface for Deskmate. Users summon the team by tagging @deskmate; the
 // front desk routes each request to the right deskmate and relays the answer.
@@ -18,4 +19,16 @@ import { slackChannel } from "eve/channels/slack";
 // per-deskmate Slack identity once the channel supports chat:write.customize.
 export default slackChannel({
   credentials: connectSlackCredentials(process.env.SLACK_CONNECTOR ?? "slack/deskmate"),
+  onAppMention: (ctx, message) => {
+    const auth = defaultSlackAuth(message, ctx);
+    const route = resolveRoute({ id: message.channelId });
+    if (!route) return { auth };
+    const directive = route.lock
+      ? `[routing] This Slack channel is dedicated to the \`${route.deskmate}\` deskmate. ` +
+        `Delegate ONLY to \`${route.deskmate}\`. If the request is outside their role, say so ` +
+        `rather than delegating to anyone else.`
+      : `[routing] This Slack channel maps to the \`${route.deskmate}\` deskmate. Delegate to ` +
+        `\`${route.deskmate}\` by default, unless the user explicitly names a different deskmate.`;
+    return { auth, context: [directive] };
+  },
 });
