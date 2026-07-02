@@ -73,3 +73,17 @@ export function chunkMarkdown(text: string, limit: number = MAX_MARKDOWN_CHARS):
   if (current) chunks.push(current);
   return chunks;
 }
+
+/**
+ * One line per teammate, for injecting into a deskmate's convene delegation so
+ * it knows who it can tag. Optionally exclude the deskmate itself. Generated
+ * from the registry, so new deskmates appear with no further wiring.
+ */
+export function deskmateRoster(excludeId?: string): string {
+  return Object.values(
+    DESKMATES as Record<string, { id: string; displayName: string; emoji: string; summary: string }>,
+  )
+    .filter((d) => d.id !== excludeId)
+    .map((d) => `- ${d.id} (${d.emoji} ${d.displayName}): ${d.summary}`)
+    .join("\n");
+}
