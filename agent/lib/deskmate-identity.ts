@@ -23,9 +23,13 @@ export type SlackSenderIdentity = {
  * fetch. Prefer an explicit override; otherwise use Vercel's production URL.
  */
 function publicBaseUrl(): string {
-  const explicit = process.env.DESKMATE_PUBLIC_URL;
-  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL;
-  const raw = explicit ?? (vercel ? `https://${vercel}` : "");
+  // Treat an empty/whitespace override as unset so it still falls back to the
+  // Vercel URL, and prepend https:// when a scheme-less host is supplied (Slack
+  // needs an absolute URL to fetch the avatar).
+  const explicit = process.env.DESKMATE_PUBLIC_URL?.trim();
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  let raw = explicit || (vercel ? `https://${vercel}` : "");
+  if (raw && !/^https?:\/\//i.test(raw)) raw = `https://${raw}`;
   return raw.replace(/\/+$/, "");
 }
 

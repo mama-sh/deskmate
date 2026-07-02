@@ -27,15 +27,25 @@ import { chunkMarkdown, deskmateSlackIdentity } from "../lib/deskmate-identity.j
 // member. Full per-deskmate identity everywhere would require a separate Slack app
 // per deskmate — which defeats the single-install model — so we accept the trade.
 
-/** Read the deskmate id remembered for the current session, if any. */
-function activeDeskmate(state: unknown): string | null {
-  const v = (state as { activeDeskmateId?: unknown } | null)?.activeDeskmateId;
-  return typeof v === "string" ? v : null;
+type DeskmateState = { activeDeskmateId?: string | null; activeDeskmateTurnId?: string | null };
+
+/**
+ * The deskmate delegated to on THIS turn, if any. Scoped by turnId so a value left
+ * behind by an aborted turn (turn.failed, or a completion that hit an early return
+ * before the reset below) can't attribute a later, non-delegating turn to the wrong
+ * deskmate — a stale turnId simply won't match the current one.
+ */
+function activeDeskmateForTurn(state: unknown, turnId: string): string | null {
+  const s = state as DeskmateState | null;
+  if (!s || s.activeDeskmateTurnId !== turnId) return null;
+  return typeof s.activeDeskmateId === "string" ? s.activeDeskmateId : null;
 }
 
-/** Remember (or clear) which deskmate is answering this session's turn. */
-function setActiveDeskmate(state: unknown, id: string | null): void {
-  (state as { activeDeskmateId?: string | null }).activeDeskmateId = id;
+/** Remember which deskmate is answering this turn (or clear with null, null). */
+function setActiveDeskmate(state: unknown, id: string | null, turnId: string | null): void {
+  const s = state as DeskmateState;
+  s.activeDeskmateId = id;
+  s.activeDeskmateTurnId = turnId;
 }
 
 export default slackChannel({
@@ -59,7 +69,7 @@ export default slackChannel({
       for (const action of data.actions ?? []) {
         const a = action as { kind?: string; subagentName?: unknown };
         if (a.kind === "subagent-call" && typeof a.subagentName === "string") {
-          setActiveDeskmate(channel.state, a.subagentName);
+          setActiveDeskmate(channel.state, a.subagentName, data.turnId);
         }
       }
     },
@@ -71,8 +81,8 @@ export default slackChannel({
       const message = data.message;
       if (!message) return;
 
-      const id = activeDeskmate(channel.state);
-      setActiveDeskmate(channel.state, null); // reset so the next turn starts clean
+      const id = activeDeskmateForTurn(channel.state, data.turnId);
+      setActiveDeskmate(channel.state, null, null); // reset so the next turn starts clean
       const identity = deskmateSlackIdentity(id);
       const channelId = channel.state.channelId;
       const threadTs = channel.state.threadTs;
@@ -82,6 +92,7 @@ export default slackChannel({
         return;
       }
 
+      let posted = 0;
       try {
         for (const chunk of chunkMarkdown(message)) {
           const res = await channel.slack.request("chat.postMessage", {
@@ -93,10 +104,12 @@ export default slackChannel({
             ...(identity.icon_emoji ? { icon_emoji: identity.icon_emoji } : {}),
           });
           if (!res.ok) throw new Error(`chat.postMessage failed: ${res.error}`);
+          posted++;
         }
       } catch {
-        // Customize scope missing or the call failed — don't drop the answer.
-        await channel.thread.post({ markdown: message });
+        // Only fall back if nothing was posted yet — reposting the full message after
+        // some chunks already landed would duplicate content in the thread.
+        if (posted === 0) await channel.thread.post({ markdown: message });
       }
     },
   },

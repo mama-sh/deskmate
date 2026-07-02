@@ -21,5 +21,6 @@ export function hasAvatar(id: string): boolean {
 export function avatarPng(id: string): Uint8Array | null {
   const b64 = AVATARS[id];
   if (!b64) return null;
-  return Uint8Array.from(Buffer.from(b64, "base64"));
+  // Buffer is a Uint8Array subclass — return it directly, no extra copy.
+  return Buffer.from(b64, "base64");
 }
