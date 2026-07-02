@@ -33,13 +33,20 @@ async function resolveBotToken(): Promise<string> {
 }
 
 async function slackApi(method: string, params: Record<string, unknown>): Promise<any> {
+  // Slack Web API read methods (auth.test, conversations.replies) parse
+  // form/query params, NOT JSON bodies — a JSON body silently drops the args
+  // and Slack answers `invalid_arguments`. Form-encode like the official SDK.
+  const form = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null) form.set(k, String(v));
+  }
   const res = await fetch(`https://slack.com/api/${method}`, {
     method: "POST",
     headers: {
-      "content-type": "application/json; charset=utf-8",
+      "content-type": "application/x-www-form-urlencoded; charset=utf-8",
       authorization: `Bearer ${await resolveBotToken()}`,
     },
-    body: JSON.stringify(params),
+    body: form.toString(),
   });
   const json = (await res.json()) as any;
   if (!json?.ok) log(`slack ${method} error:`, json?.error);
