@@ -93,18 +93,26 @@ export default slackChannel({
       if (result?.kind !== "tool-result" || result.toolName !== "deskmate_says") return;
       const output = result.output as { deskmate?: string; text?: string } | undefined;
       const text = output?.text?.trim();
-      const channelId = channel.state.channelId;
-      const threadTs = channel.state.threadTs;
-      if (!text || !channelId || !threadTs) return;
+      if (!text) return; // nothing to voice
 
       const decision = nextConveneDecision(channel.state as ConveneState, data.turnId, maxTurns());
       const cs = channel.state as ConveneFields;
       cs.convenedTurnId = decision.turnId;
       cs.convenedTurns = decision.turns;
-      cs.convened = true; // suppress the root's default final post this turn
+      cs.convened = true; // suppress the root's default final post this turn, however we deliver
       if (!decision.post) return; // hard cap backstop — drop extra turns
 
+      // Custom identity needs an anchored thread + a resolved identity. Without them
+      // (e.g. a not-yet-anchored @mention session), fall back to the default post —
+      // which anchors thread-less sessions — so the deskmate's answer is never dropped.
       const identity = deskmateSlackIdentity(output?.deskmate);
+      const channelId = channel.state.channelId;
+      const threadTs = channel.state.threadTs;
+      if (!identity || !channelId || !threadTs) {
+        await channel.thread.post({ markdown: text });
+        return;
+      }
+
       let posted = 0;
       try {
         for (const chunk of chunkMarkdown(text)) {
@@ -112,9 +120,9 @@ export default slackChannel({
             channel: channelId,
             thread_ts: threadTs,
             markdown_text: chunk,
-            ...(identity ? { username: identity.username } : {}),
-            ...(identity?.icon_url ? { icon_url: identity.icon_url } : {}),
-            ...(identity?.icon_emoji ? { icon_emoji: identity.icon_emoji } : {}),
+            username: identity.username,
+            ...(identity.icon_url ? { icon_url: identity.icon_url } : {}),
+            ...(identity.icon_emoji ? { icon_emoji: identity.icon_emoji } : {}),
           });
           if (!res.ok) throw new Error(`chat.postMessage failed: ${res.error}`);
           posted++;
