@@ -9,21 +9,21 @@ import slack from "./slack.js";
 // for Deskmate. This complements the mention/DM-only managed channel (slack.ts).
 //
 // Wiring: registered as a SECOND Vercel Connect trigger destination at
-// /eve/v1/slack_ambient, receiving `message.channels` events. Requires the
-// connector to have the `channels:history` scope + `message.channels` event
-// subscription (set in the Connect dashboard → Advanced), and a reinstall.
+// /eve/v1/slack-ambient, receiving `message.channels` events. Requires the
+// connector's `channels:history` scope + `message.channels` subscription, and the
+// bot must be a member of the channel.
 //
-// Safeguards: drops the bot's own posts + subtypes, dedupes Slack retries,
-// ignores @mentions (the managed channel handles those), only engages threads
-// Deskmate has posted in, and the gate errs toward silence to avoid noise.
+// Every decision is logged with the [ambient] prefix so a single test run shows
+// exactly why it responded or stayed silent.
 
 const CONNECTOR_UID = process.env.SLACK_CONNECTOR ?? "slack/deskmate";
-// Cheap model for the "should I respond?" gate; override if needed.
-const GATE_MODEL = process.env.DESKMATE_GATE_MODEL ?? "anthropic/claude-haiku-4.5";
+// Gate model. Default to the same gateway model the agent uses (known-good on this
+// deployment); override with DESKMATE_GATE_MODEL (e.g. a cheaper haiku) once proven.
+const GATE_MODEL = process.env.DESKMATE_GATE_MODEL ?? "anthropic/claude-sonnet-4.6";
 
 const creds = connectSlackCredentials(CONNECTOR_UID);
+const log = (...a: unknown[]) => console.log("[ambient]", ...a);
 
-// Best-effort per-instance caches (survive within a warm function instance).
 let botUserIdCache: string | null = null;
 const seenEventIds = new Set<string>();
 
@@ -41,13 +41,16 @@ async function slackApi(method: string, params: Record<string, unknown>): Promis
     },
     body: JSON.stringify(params),
   });
-  return (await res.json()) as any;
+  const json = (await res.json()) as any;
+  if (!json?.ok) log(`slack ${method} error:`, json?.error);
+  return json;
 }
 
 async function getBotUserId(): Promise<string | null> {
   if (botUserIdCache) return botUserIdCache;
   const r = await slackApi("auth.test", {});
   botUserIdCache = r?.ok ? (r.user_id ?? null) : null;
+  log("botUserId =", botUserIdCache);
   return botUserIdCache;
 }
 
@@ -60,6 +63,7 @@ async function deskmateInThread(channelId: string, threadTs: string, botUserId: 
     .slice(-6)
     .map((m) => `${m?.user === botUserId ? "Deskmate" : "user"}: ${String(m?.text ?? "").slice(0, 400)}`)
     .join("\n");
+  log(`participation: replies=${messages.length} joined=${joined}`);
   return { joined, recent };
 }
 
@@ -77,9 +81,10 @@ async function shouldRespond(text: string, recent: string): Promise<boolean> {
         "When unsure, answer NO.\n\n" +
         `Recent thread:\n${recent}\n\nNEW message: ${text}\n\nAnswer with exactly YES or NO.`,
     });
+    log(`gate verdict: "${verdict.trim().slice(0, 30)}"`);
     return /^\s*yes\b/i.test(verdict);
   } catch (err) {
-    console.error("[slack_ambient] gate error, staying silent:", err);
+    log(`gate ERROR (model=${GATE_MODEL}), staying silent:`, (err as Error)?.message ?? err);
     return false;
   }
 }
@@ -106,8 +111,12 @@ export default defineChannel({
       if (creds.webhookVerifier) {
         try {
           const verified = await creds.webhookVerifier(req, raw);
-          if (!verified) return new Response("unauthorized", { status: 401 });
-        } catch {
+          if (!verified) {
+            log("skip: webhook verification failed");
+            return new Response("unauthorized", { status: 401 });
+          }
+        } catch (err) {
+          log("skip: webhook verifier threw:", (err as Error)?.message ?? err);
           return new Response("unauthorized", { status: 401 });
         }
       }
@@ -119,34 +128,50 @@ export default defineChannel({
         return new Response("ok");
       }
 
-      // Slack URL-verification handshake (if it ever reaches this route).
       if (envelope?.type === "url_verification") {
         return Response.json({ challenge: envelope.challenge });
       }
 
-      // 2) Dedupe Slack retries.
-      if (rememberEvent(envelope?.event_id)) return new Response("ok");
-
       const event = envelope?.event;
-      // 3) Only human, non-subtype channel messages that are thread replies.
-      if (!event || event.type !== "message" || event.subtype || event.bot_id) return new Response("ok");
+      log(
+        `inbound: type=${event?.type} subtype=${event?.subtype ?? "-"} bot=${event?.bot_id ? "y" : "n"}` +
+          ` ch=${event?.channel} thread_ts=${event?.thread_ts ?? "-"} ts=${event?.ts} user=${event?.user}` +
+          ` text=${JSON.stringify(String(event?.text ?? "").slice(0, 60))}`,
+      );
+
+      if (rememberEvent(envelope?.event_id)) {
+        log("skip: duplicate event_id");
+        return new Response("ok");
+      }
+      if (!event || event.type !== "message" || event.subtype || event.bot_id) {
+        log("skip: not a plain user message");
+        return new Response("ok");
+      }
       const channelId: string | undefined = event.channel;
       const threadTs: string | undefined = event.thread_ts;
       const userId: string | undefined = event.user;
       const text: string = typeof event.text === "string" ? event.text : "";
-      if (!channelId || !threadTs || !userId || !text.trim()) return new Response("ok");
-      if (threadTs === event.ts) return new Response("ok"); // the thread root, not a reply
+      if (!channelId || !threadTs || !userId || !text.trim()) {
+        log("skip: missing channel/thread_ts/user/text (not a thread reply)");
+        return new Response("ok");
+      }
+      if (threadTs === event.ts) {
+        log("skip: message is the thread root, not a reply");
+        return new Response("ok");
+      }
 
-      // 4) Heavy work off the response path — ack Slack immediately.
+      // 2) Heavy work off the response path — ack Slack immediately.
       args.waitUntil(
         (async () => {
           try {
             const botUserId = await getBotUserId();
-            if (!botUserId || userId === botUserId) return;
-            if (text.includes(`<@${botUserId}>`)) return; // @mention → managed channel handles it
+            if (!botUserId) return log("skip: could not resolve botUserId");
+            if (userId === botUserId) return log("skip: message is from the bot");
+            if (text.includes(`<@${botUserId}>`)) return log("skip: message @mentions the bot (managed channel handles it)");
             const { joined, recent } = await deskmateInThread(channelId, threadTs, botUserId);
-            if (!joined) return; // only threads Deskmate already joined
-            if (!(await shouldRespond(text, recent))) return; // relevance gate
+            if (!joined) return log("skip: Deskmate has not posted in this thread");
+            if (!(await shouldRespond(text, recent))) return log("decision: gate said NO — staying silent");
+            log("decision: dispatching a reply into the thread");
             await args.receive(slack, {
               message: text,
               target: { channelId, threadTs },
@@ -159,8 +184,9 @@ export default defineChannel({
                 attributes: { teamId: envelope?.team_id ?? null, channelId },
               },
             });
+            log("dispatched ok");
           } catch (err) {
-            console.error("[slack_ambient] handler error:", err);
+            log("handler error:", (err as Error)?.message ?? err);
           }
         })(),
       );
