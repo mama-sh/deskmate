@@ -1,0 +1,13 @@
+{
+  "name": "starter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "deskmate sync && eve build"
+  },
+  "dependencies": {
+    "@deskmate/core": "workspace:*",
+    "deskmate": "workspace:*"
+  }
+}

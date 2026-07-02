@@ -1,0 +1,21 @@
+{
+  "name": "deskmate",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "deskmate": "./src/cli.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@deskmate/core": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.x",
+    "typescript": "7.0.1-rc",
+    "vitest": "^4.1.9"
+  }
+}
