@@ -19,6 +19,8 @@
 
 Reference files to read first: `agent/channels/slack.ts` (event handlers + identity delivery), `agent/lib/deskmate-identity.ts`, `agent/lib/deskmates.ts` (the `DESKMATES` registry), `agent/instructions.md` (front-desk routing rules), `agent/channels/slack-ambient.ts` (example of `channel.slack`-style Slack calls + state).
 
+> **Test convention (important):** `vitest.config.ts` only discovers `tests/**/*.test.ts`. Put every new test at `tests/<name>.test.ts` and import the subject with a repo-relative path, e.g. `import { x } from "../agent/lib/convene.js";`. The co-located `agent/**/*.test.ts` paths written in the task code blocks below are illustrative — use `tests/` so the runner actually picks them up. (Task 1 already lands at `tests/deskmate-identity.test.ts`.)
+
 ---
 
 ## Task 1: Roster helper (`deskmateRoster`)
