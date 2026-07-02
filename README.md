@@ -46,6 +46,10 @@ Slack credentials + durable pause/resume handled by Vercel (Connect + Workflows)
 - **Human-in-the-loop** — any tool with `approval: always()` pauses for a human.
   Eve's durable sessions (Vercel Workflows) make the wait free; nothing is held
   in memory while it's parked.
+- **Collaboration** — most requests go to one deskmate. When a request spans
+  domains, the front desk convenes several: each posts in the thread under its own
+  name and avatar and can **tag** a teammate ("cc 🔧 DevOps Engineer") to pull them
+  in, until the question is answered. Bounded by `DESKMATE_MAX_TURNS` (default 6).
 
 ## The deskmate library
 
