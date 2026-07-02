@@ -1,6 +1,7 @@
 import { connectSlackCredentials } from "@vercel/connect/eve";
 import { defaultSlackAuth, slackChannel } from "eve/channels/slack";
 import { resolveRoute } from "../lib/channel-routes.js";
+import { chunkMarkdown, deskmateSlackIdentity } from "../lib/deskmate-identity.js";
 
 // Slack surface for Deskmate. Users summon the team by tagging @deskmate; the
 // front desk routes each request to the right deskmate and relays the answer.
@@ -13,10 +14,40 @@ import { resolveRoute } from "../lib/channel-routes.js";
 // DevOps `record_decision` write), eve renders approve/reject buttons in the thread
 // and resumes the parked turn once a human answers.
 //
-// Per-reply identity (a custom name/icon per deskmate) is not exposed by the Slack
-// channel in this eve version, so every reply posts under one shared "Deskmate" bot.
-// The roster + display identity live in agent/lib/deskmates.ts — the seam that wires
-// per-deskmate Slack identity once the channel supports chat:write.customize.
+// Per-deskmate identity: the front desk delegates to a subagent (the `actions.
+// requested` event carries a `subagent-call` with its name); we remember which
+// deskmate answered and post the final reply AS them — their displayName as the
+// sender and their avatar as the picture — via chat.postMessage with a custom
+// identity. This needs the connector's `chat:write.customize` scope; without it we
+// fall back to the shared "Deskmate" bot. Identity lives in agent/lib/deskmates.ts.
+//
+// Slack limitation: the custom name/avatar apply to the message BODY only. Thread
+// reply-preview face-piles, notifications, and profile popovers fall back to a
+// generic bot icon, because a per-message custom identity is not a real workspace
+// member. Full per-deskmate identity everywhere would require a separate Slack app
+// per deskmate — which defeats the single-install model — so we accept the trade.
+
+type DeskmateState = { activeDeskmateId?: string | null; activeDeskmateTurnId?: string | null };
+
+/**
+ * The deskmate delegated to on THIS turn, if any. Scoped by turnId so a value left
+ * behind by an aborted turn (turn.failed, or a completion that hit an early return
+ * before the reset below) can't attribute a later, non-delegating turn to the wrong
+ * deskmate — a stale turnId simply won't match the current one.
+ */
+function activeDeskmateForTurn(state: unknown, turnId: string): string | null {
+  const s = state as DeskmateState | null;
+  if (!s || s.activeDeskmateTurnId !== turnId) return null;
+  return typeof s.activeDeskmateId === "string" ? s.activeDeskmateId : null;
+}
+
+/** Remember which deskmate is answering this turn (or clear with null, null). */
+function setActiveDeskmate(state: unknown, id: string | null, turnId: string | null): void {
+  const s = state as DeskmateState;
+  s.activeDeskmateId = id;
+  s.activeDeskmateTurnId = turnId;
+}
+
 export default slackChannel({
   credentials: connectSlackCredentials(process.env.SLACK_CONNECTOR ?? "slack/deskmate"),
   onAppMention: (ctx, message) => {
@@ -30,5 +61,56 @@ export default slackChannel({
       : `[routing] This Slack channel maps to the \`${route.deskmate}\` deskmate. Delegate to ` +
         `\`${route.deskmate}\` by default, unless the user explicitly names a different deskmate.`;
     return { auth, context: [directive] };
+  },
+  events: {
+    // Note which deskmate the front desk delegated to, so the final reply can be
+    // attributed to them. Subagent calls arrive as `subagent-call` actions.
+    "actions.requested"(data, channel) {
+      for (const action of data.actions ?? []) {
+        const a = action as { kind?: string; subagentName?: unknown };
+        if (a.kind === "subagent-call" && typeof a.subagentName === "string") {
+          setActiveDeskmate(channel.state, a.subagentName, data.turnId);
+        }
+      }
+    },
+    // Deliver the completed reply. When a deskmate handled the turn and we can post
+    // into an anchored thread, post AS them; otherwise fall back to the default
+    // shared-bot post (which also owns session anchoring for thread-less sessions).
+    async "message.completed"(data, channel) {
+      if (data.finishReason === "tool-calls") return;
+      const message = data.message;
+      if (!message) return;
+
+      const id = activeDeskmateForTurn(channel.state, data.turnId);
+      setActiveDeskmate(channel.state, null, null); // reset so the next turn starts clean
+      const identity = deskmateSlackIdentity(id);
+      const channelId = channel.state.channelId;
+      const threadTs = channel.state.threadTs;
+
+      if (!identity || !channelId || !threadTs) {
+        await channel.thread.post({ markdown: message });
+        return;
+      }
+
+      let posted = 0;
+      try {
+        for (const chunk of chunkMarkdown(message)) {
+          const res = await channel.slack.request("chat.postMessage", {
+            channel: channelId,
+            thread_ts: threadTs,
+            markdown_text: chunk,
+            username: identity.username,
+            ...(identity.icon_url ? { icon_url: identity.icon_url } : {}),
+            ...(identity.icon_emoji ? { icon_emoji: identity.icon_emoji } : {}),
+          });
+          if (!res.ok) throw new Error(`chat.postMessage failed: ${res.error}`);
+          posted++;
+        }
+      } catch {
+        // Only fall back if nothing was posted yet — reposting the full message after
+        // some chunks already landed would duplicate content in the thread.
+        if (posted === 0) await channel.thread.post({ markdown: message });
+      }
+    },
   },
 });
