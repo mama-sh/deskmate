@@ -1,0 +1,57 @@
+{
+  "planPath": "docs/plans/2026-07-02-multi-deskmate-interaction.md",
+  "tasks": [
+    {
+      "id": 23,
+      "subject": "Task 1: Roster helper (deskmateRoster)",
+      "status": "completed"
+    },
+    {
+      "id": 24,
+      "subject": "Task 2: Convene turn-cap helper",
+      "status": "completed"
+    },
+    {
+      "id": 25,
+      "subject": "Task 3: deskmate_says tool",
+      "status": "completed"
+    },
+    {
+      "id": 26,
+      "subject": "Task 4: Render convene turns in Slack channel",
+      "status": "completed",
+      "blockedBy": [
+        24,
+        25
+      ]
+    },
+    {
+      "id": 27,
+      "subject": "Task 5: Convene loop instructions",
+      "status": "completed",
+      "blockedBy": [
+        26
+      ]
+    },
+    {
+      "id": 28,
+      "subject": "Task 6: Config + docs",
+      "status": "completed",
+      "blockedBy": [
+        26
+      ]
+    },
+    {
+      "id": 29,
+      "subject": "Task 7: Full green + sandbox verification + PR",
+      "status": "pending",
+      "blockedBy": [
+        23,
+        26,
+        27,
+        28
+      ]
+    }
+  ],
+  "lastUpdated": "2026-07-02"
+}
