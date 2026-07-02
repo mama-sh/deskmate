@@ -19,7 +19,7 @@
     {
       "id": 26,
       "subject": "Task 4: Render convene turns in Slack channel",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         24,
         25
@@ -28,7 +28,7 @@
     {
       "id": 27,
       "subject": "Task 5: Convene loop instructions",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         26
       ]
@@ -36,7 +36,7 @@
     {
       "id": 28,
       "subject": "Task 6: Config + docs",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         26
       ]
