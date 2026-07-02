@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveRoute } from "../agent/lib/channel-routes.js";
+import { resolveRoute } from "../src/channel-routes.js";
 
 const routes = {
   incidents: { deskmate: "devops", lock: true },

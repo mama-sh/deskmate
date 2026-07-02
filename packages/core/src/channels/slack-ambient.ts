@@ -1,12 +1,16 @@
 import { connectSlackCredentials } from "@vercel/connect/eve";
 import { defineChannel, POST } from "eve/channels";
 import { generateText } from "ai";
-import slack from "./slack.js";
+import { createSlackChannel } from "./slack.js";
+import type { Roster } from "../roster.js";
 
 // ── Ambient thread participation ──────────────────────────────────────────────
 // Reply to thread messages WITHOUT an @mention — but only in threads Deskmate
 // already joined, and only when a lightweight gate decides the message is really
 // for Deskmate. This complements the mention/DM-only managed channel (slack.ts).
+//
+// Roster-parameterized: `createSlackAmbientChannel(roster)` builds the managed
+// Slack channel from the same roster and dispatches qualifying replies into it.
 //
 // Wiring: registered as a SECOND Vercel Connect trigger destination at
 // /eve/v1/slack-ambient, receiving `message.channels` events. Requires the
@@ -109,7 +113,9 @@ function rememberEvent(eventId: string | undefined): boolean {
   return false;
 }
 
-export default defineChannel({
+export function createSlackAmbientChannel(roster: Roster) {
+  const slack = createSlackChannel(roster);
+  return defineChannel({
   routes: [
     POST("/eve/v1/slack-ambient", async (req, args) => {
       const raw = await req.text();
@@ -201,4 +207,5 @@ export default defineChannel({
       return new Response("ok");
     }),
   ],
-});
+  });
+}

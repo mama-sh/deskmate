@@ -5,12 +5,15 @@
 // connector's `chat:write.customize` scope. This module turns a deskmate id into
 // that identity so a reply reads as coming FROM the deskmate, not a generic bot.
 //
-// Avatars are served by this app itself (agent/channels/deskmate-avatars.ts), so a
-// fork needs no external image host. When no hosted avatar or public base URL is
+// Avatars are served by this app itself (channels/deskmate-avatars.ts), so a fork
+// needs no external image host. When no hosted avatar or public base URL is
 // available, we fall back to the deskmate's emoji as the icon.
+//
+// The roster is passed in (never imported): core owns the identity logic, the
+// consumer owns the roster data.
 
-import { DESKMATES } from "./deskmates.js";
 import { hasAvatar } from "./deskmate-avatars.js";
+import type { Roster } from "./roster.js";
 
 export type SlackSenderIdentity = {
   username: string;
@@ -34,9 +37,12 @@ function publicBaseUrl(): string {
 }
 
 /** Resolve the Slack sender identity for a deskmate id, or null if unknown. */
-export function deskmateSlackIdentity(id: string | null | undefined): SlackSenderIdentity | null {
+export function deskmateSlackIdentity(
+  roster: Roster,
+  id: string | null | undefined,
+): SlackSenderIdentity | null {
   if (!id) return null;
-  const d = (DESKMATES as Record<string, { displayName: string; emoji: string } | undefined>)[id];
+  const d = roster[id];
   if (!d) return null;
   const base = publicBaseUrl();
   if (base && hasAvatar(id)) {
@@ -77,12 +83,10 @@ export function chunkMarkdown(text: string, limit: number = MAX_MARKDOWN_CHARS):
 /**
  * One line per teammate, for injecting into a deskmate's convene delegation so
  * it knows who it can tag. Optionally exclude the deskmate itself. Generated
- * from the registry, so new deskmates appear with no further wiring.
+ * from the passed-in roster, so new deskmates appear with no further wiring.
  */
-export function deskmateRoster(excludeId?: string): string {
-  return Object.values(
-    DESKMATES as Record<string, { id: string; displayName: string; emoji: string; summary: string }>,
-  )
+export function deskmateRoster(roster: Roster, excludeId?: string): string {
+  return Object.values(roster)
     .filter((d) => d.id !== excludeId)
     .map((d) => `- ${d.id} (${d.emoji} ${d.displayName}): ${d.summary}`)
     .join("\n");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextConveneDecision, type ConveneState } from "../agent/lib/convene.js";
+import { nextConveneDecision, type ConveneState } from "../src/convene.js";
 
 describe("nextConveneDecision", () => {
   it("allows the first turn and increments the counter", () => {

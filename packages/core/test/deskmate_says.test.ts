@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import tool from "../agent/tools/deskmate_says.js";
+import tool from "../src/deskmate-says.js";
 
 describe("deskmate_says", () => {
   it("returns the deskmate id and text verbatim for the channel to render", async () => {

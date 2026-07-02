@@ -1,10 +1,10 @@
 import { defineChannel, GET } from "eve/channels";
-import { avatarPng } from "../lib/deskmate-avatars.js";
+import { avatarPng } from "../deskmate-avatars.js";
 
 // Serves each deskmate's avatar as a PNG at /eve/v1/avatars/<id>.png. These URLs
-// become the Slack `icon_url` for per-deskmate replies (see agent/lib/deskmate-
-// identity.ts). Public and unauthenticated by design — Slack fetches them to render
-// the sender's picture, and they contain no secrets.
+// become the Slack `icon_url` for per-deskmate replies (see deskmate-identity.ts).
+// Public and unauthenticated by design — Slack fetches them to render the sender's
+// picture, and they contain no secrets.
 
 export default defineChannel({
   routes: [
