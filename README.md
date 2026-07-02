@@ -198,6 +198,23 @@ company's tools, a signup/control-plane/dashboard, billing, and per-tenant
 provisioning. The seams that make that layer additive are already present: connections
 resolve auth per call, and deskmates are a data-driven library.
 
+## Versioning & releases
+
+Deskmate follows [Semantic Versioning](https://semver.org) (`MAJOR.MINOR.PATCH`) and
+[Conventional Commits](https://www.conventionalcommits.org). Commit types drive the next
+version: `feat:` → minor, `fix:` → patch, `!` / `BREAKING CHANGE:` → major (kept to a
+minor bump while pre-1.0).
+
+Releases are automated with [Release Please](https://github.com/googleapis/release-please).
+On every push to `main` it maintains one **release PR** that bumps `package.json` and
+updates `CHANGELOG.md` from the commits since the last release; merging that PR tags
+`vX.Y.Z` and publishes a GitHub Release — a version ships only when a human merges it.
+
+**One-time repo setup:** the Action opens the release PR, which requires
+**Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create
+and approve pull requests"** to be enabled. That's a repo-admin setting, so turn it on for
+the repo you own (your fork, or the canonical repo if you administer it).
+
 ## Links
 
 `deskmate.sh` · [`github.com/deskmate`](https://github.com/deskmate) · npm `@deskmate`
