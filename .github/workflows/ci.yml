@@ -1,0 +1,47 @@
+name: ci
+
+# Verifies the whole workspace on every push/PR. The step ORDER is load-bearing:
+# @deskmate/core and the deskmate CLI are consumed from their compiled `dist/`,
+# which is gitignored and NOT produced by `pnpm install`. So we must
+# `build:packages` BEFORE typecheck / test / the example build — otherwise cli +
+# starter can't resolve @deskmate/core (its exports point at dist).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm version comes from the root package.json "packageManager" field.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # the framework targets Node 24 (native TS type-stripping)
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Compile @deskmate/core + deskmate CLI to dist (core before cli, topologically).
+      - name: Build packages
+        run: pnpm run build:packages
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Test
+        run: pnpm -r test
+
+      # The end-to-end proof: `deskmate sync` regenerates the example's agent/**
+      # tree from deskmate.config.ts, then `eve build` bundles it.
+      - name: Build example (sync + eve build)
+        run: pnpm --filter starter build

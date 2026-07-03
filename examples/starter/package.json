@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "//": "This example depends on @deskmate/core + deskmate via workspace:* SOURCE, so their dist/ must be compiled before `build` runs — hence vercel.json's buildCommand prefixes `pnpm -w run build:packages`. A REAL consumer installs the PUBLISHED packages (compiled dist already in node_modules) and just runs `deskmate sync && eve build`, which is exactly this `build` script.",
   "scripts": {
     "build": "deskmate sync && eve build",
     "sync": "deskmate sync",
