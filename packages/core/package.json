@@ -3,7 +3,13 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./channels/slack": "./src/channels/slack.ts",
+    "./channels/slack-ambient": "./src/channels/slack-ambient.ts",
+    "./channels/eve": "./src/channels/eve.ts",
+    "./channels/deskmate-avatars": "./src/channels/deskmate-avatars.ts",
+    "./deskmate-says": "./src/deskmate-says.ts",
+    "./front-desk-instructions": "./src/front-desk-instructions.ts"
   },
   "scripts": {
     "typecheck": "tsc",

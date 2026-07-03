@@ -3,6 +3,7 @@ import { add } from "./add.js";
 import { remove } from "./remove.js";
 import { list } from "./list.js";
 import { mcpAdd } from "./mcp-add.js";
+import { syncCommand } from "./sync/index.js";
 
 const USAGE = [
   "usage:",
@@ -31,7 +32,7 @@ switch (command) {
     await mcpAdd(rest);
     break;
   case "sync":
-    console.log("deskmate sync: not implemented yet — Task 6.");
+    await syncCommand();
     break;
   default:
     console.log(USAGE);
