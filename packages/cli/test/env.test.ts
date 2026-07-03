@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeEnv } from "../scripts/lib/env.js";
+import { mergeEnv } from "../src/lib/env.js";
 
 describe("mergeEnv", () => {
   it("appends new keys with a trailing newline", () => {

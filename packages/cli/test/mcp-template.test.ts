@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderMcpConnection } from "../scripts/lib/mcp-template.js";
+import { renderMcpConnection } from "../src/lib/mcp-template.js";
 
 describe("renderMcpConnection", () => {
   it("renders a read-only, env-token connection from options", () => {
