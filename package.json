@@ -13,6 +13,7 @@
     "start": "eve start",
     "typecheck": "tsc",
     "test": "vitest run --passWithNoTests",
+    "build:packages": "pnpm -r --filter=\"./packages/*\" build",
     "typecheck:all": "pnpm -r typecheck",
     "test:all": "pnpm -r test"
   },

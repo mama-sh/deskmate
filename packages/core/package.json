@@ -3,15 +3,17 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./channels/slack": "./src/channels/slack.ts",
-    "./channels/slack-ambient": "./src/channels/slack-ambient.ts",
-    "./channels/eve": "./src/channels/eve.ts",
-    "./channels/deskmate-avatars": "./src/channels/deskmate-avatars.ts",
-    "./deskmate-says": "./src/deskmate-says.ts",
-    "./front-desk-instructions": "./src/front-desk-instructions.ts"
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./channels/slack": { "types": "./dist/channels/slack.d.ts", "default": "./dist/channels/slack.js" },
+    "./channels/slack-ambient": { "types": "./dist/channels/slack-ambient.d.ts", "default": "./dist/channels/slack-ambient.js" },
+    "./channels/eve": { "types": "./dist/channels/eve.d.ts", "default": "./dist/channels/eve.js" },
+    "./channels/deskmate-avatars": { "types": "./dist/channels/deskmate-avatars.d.ts", "default": "./dist/channels/deskmate-avatars.js" },
+    "./deskmate-says": { "types": "./dist/deskmate-says.d.ts", "default": "./dist/deskmate-says.js" },
+    "./front-desk-instructions": { "types": "./dist/front-desk-instructions.d.ts", "default": "./dist/front-desk-instructions.js" }
   },
+  "files": ["dist"],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json && cp src/front-desk-instructions.md dist/front-desk-instructions.md",
     "typecheck": "tsc",
     "test": "vitest run --passWithNoTests"
   },

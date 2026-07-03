@@ -3,9 +3,11 @@
   "version": "0.0.0",
   "type": "module",
   "bin": {
-    "deskmate": "./src/cli.ts"
+    "deskmate": "./dist/cli.js"
   },
+  "files": ["dist"],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
     "typecheck": "tsc",
     "test": "vitest run --passWithNoTests"
   },
