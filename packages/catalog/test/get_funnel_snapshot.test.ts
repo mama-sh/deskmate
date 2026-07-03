@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { funnelConversion } from "../library/deskmates/growth_hacker/tools/get_funnel_snapshot.js";
+import { funnelConversion } from "../roles/growth_hacker/tools/get_funnel_snapshot.js";
 
 describe("funnelConversion", () => {
   it("computes step-over-step and step-over-top conversion as percentages", () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { withDeltas } from "../library/deskmates/product_analyst/tools/get_metric_snapshot.js";
+import { withDeltas } from "../roles/product_analyst/tools/get_metric_snapshot.js";
 
 describe("withDeltas", () => {
   it("computes absolute and percent delta vs previous", () => {

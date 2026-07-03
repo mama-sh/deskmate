@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sprintProgress } from "../library/deskmates/project_manager/tools/get_sprint_status.js";
+import { sprintProgress } from "../roles/project_manager/tools/get_sprint_status.js";
 
 describe("sprintProgress", () => {
   it("rolls issues up by story points", () => {

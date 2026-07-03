@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scoreAccounts } from "../library/deskmates/customer_success/tools/get_account_health.js";
+import { scoreAccounts } from "../roles/customer_success/tools/get_account_health.js";
 
 describe("scoreAccounts", () => {
   it("bands accounts and sorts most-at-risk first", () => {

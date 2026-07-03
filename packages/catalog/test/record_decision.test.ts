@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { recordDecision } from "../library/deskmates/devops/tools/record_decision.js";
+import { recordDecision } from "../roles/devops/tools/record_decision.js";
 
 describe("recordDecision", () => {
   it("returns a normalized record with a trimmed title", () => {

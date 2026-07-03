@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   summarizeIncidents,
   type Incident,
-} from "../library/deskmates/devops/tools/get_incident_summary.js";
+} from "../roles/devops/tools/get_incident_summary.js";
 
 describe("summarizeIncidents", () => {
   it("groups by signature and counts, sorted by count desc", () => {
