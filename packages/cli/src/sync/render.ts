@@ -16,6 +16,11 @@ import { defineAgent } from "eve";
 
 export default defineAgent({
   model: ${JSON.stringify(team.model)},
+  // Keep @deskmate/core external so Eve traces it in the hosted output instead of
+  // bundling it into each authored channel. Bundling it pulls core's transitive
+  // deps (@vercel/connect, ai) into rolldown's per-channel graph and breaks the
+  // build; a normally-installed core in node_modules is externalized anyway.
+  build: { externalDependencies: ["@deskmate/core"] },
 });
 `;
 }

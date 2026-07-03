@@ -59,6 +59,11 @@ describe("renderRootAgent", () => {
     expect(out).toContain('model: "anthropic/claude-opus-4.6"');
     expect(out).toContain("export default defineAgent(");
   });
+
+  it("keeps @deskmate/core external so channels don't bundle it", () => {
+    const out = renderRootAgent(fixtureTeam);
+    expect(out).toContain('build: { externalDependencies: ["@deskmate/core"] }');
+  });
 });
 
 describe("renderSubagentAgent", () => {
