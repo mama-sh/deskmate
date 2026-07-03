@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { TeamConfig } from "@deskmate/core";
+import { defineTeam, type TeamConfig } from "@deskmate/core";
 import { planSync } from "./plan.js";
 
 export const CONFIG_FILE = "deskmate.config.ts";
@@ -22,10 +22,9 @@ export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
     throw new Error(`no ${CONFIG_FILE} found in ${cwd}. Run \`deskmate add <id>\` first.`);
   }
 
-  let team: TeamConfig;
+  let mod: { default?: unknown };
   try {
-    const mod = (await import(pathToFileURL(configPath).href)) as { default?: unknown };
-    team = mod.default as TeamConfig;
+    mod = (await import(pathToFileURL(configPath).href)) as { default?: unknown };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     throw new Error(
@@ -33,8 +32,20 @@ export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
         `(native type-stripping) or \`node --experimental-strip-types\`.`,
     );
   }
-  if (!team || typeof team !== "object") {
+  if (!mod.default || typeof mod.default !== "object") {
     throw new Error(`${CONFIG_FILE} must \`export default defineTeam({ … })\`.`);
+  }
+
+  // Validate + normalize through defineTeam whether or not the consumer already
+  // wrapped their config with it (re-parsing is idempotent): this applies schema
+  // defaults (e.g. frontDesk.maxTurns) and runs the cross-reference checks, so an
+  // invalid config fails here with a clear reason instead of generating a broken tree.
+  let team: TeamConfig;
+  try {
+    team = defineTeam(mod.default);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`invalid ${CONFIG_FILE}: ${reason}`);
   }
 
   const plan = planSync(team, cwd);

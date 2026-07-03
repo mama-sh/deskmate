@@ -19,7 +19,7 @@ import {
 // testable without importing/parsing a real config file.
 const fixtureTeam = {
   model: "anthropic/claude-opus-4.6",
-  frontDesk: { maxTurns: 6 },
+  frontDesk: { maxTurns: 4 },
   connections: {
     sentry: { kind: "mcp", env: "SENTRY" },
     mixpanel: { kind: "mcp", env: "MIXPANEL" },
@@ -112,22 +112,22 @@ describe("renderReexport", () => {
 });
 
 describe("channel + tool shims", () => {
-  it("slack channel shim calls createSlackChannel(DESKMATES, CHANNEL_ROUTES)", () => {
-    const out = renderSlackChannel();
+  it("slack channel shim calls createSlackChannel with the config maxTurns arg", () => {
+    const out = renderSlackChannel(fixtureTeam);
     expect(out.startsWith(BANNER)).toBe(true);
     expect(out).toContain('import { createSlackChannel } from "@deskmate/core/channels/slack";');
     expect(out).toContain('import { DESKMATES } from "../lib/deskmates.js";');
     expect(out).toContain('import { CHANNEL_ROUTES } from "../lib/channel-routes.js";');
-    expect(out).toContain("export default createSlackChannel(DESKMATES, CHANNEL_ROUTES);");
+    expect(out).toContain("export default createSlackChannel(DESKMATES, CHANNEL_ROUTES, 4);");
   });
 
-  it("slack-ambient shim calls createSlackAmbientChannel(DESKMATES, CHANNEL_ROUTES)", () => {
-    const out = renderSlackAmbientChannel();
+  it("slack-ambient shim calls createSlackAmbientChannel with the config maxTurns arg", () => {
+    const out = renderSlackAmbientChannel(fixtureTeam);
     expect(out).toContain(
       'import { createSlackAmbientChannel } from "@deskmate/core/channels/slack-ambient";',
     );
     expect(out).toContain('import { CHANNEL_ROUTES } from "../lib/channel-routes.js";');
-    expect(out).toContain("export default createSlackAmbientChannel(DESKMATES, CHANNEL_ROUTES);");
+    expect(out).toContain("export default createSlackAmbientChannel(DESKMATES, CHANNEL_ROUTES, 4);");
   });
 
   it("deskmate_says tool shim re-exports the core tool", () => {

@@ -104,25 +104,29 @@ export function renderReexport(relImportPath: string, opts?: { star?: boolean })
   return `${lines.join("\n")}\n`;
 }
 
-/** `agent/channels/slack.ts` — build the managed Slack channel from the roster + routes. */
-export function renderSlackChannel(): string {
+/**
+ * `agent/channels/slack.ts` — build the managed Slack channel from the roster +
+ * routes. The consumer's `team.frontDesk.maxTurns` is baked in as the convene cap
+ * (env `DESKMATE_MAX_TURNS` still overrides it at runtime).
+ */
+export function renderSlackChannel(team: TeamConfig): string {
   return `${BANNER}
 import { createSlackChannel } from "@deskmate/core/channels/slack";
 import { DESKMATES } from "../lib/deskmates.js";
 import { CHANNEL_ROUTES } from "../lib/channel-routes.js";
 
-export default createSlackChannel(DESKMATES, CHANNEL_ROUTES);
+export default createSlackChannel(DESKMATES, CHANNEL_ROUTES, ${team.frontDesk.maxTurns});
 `;
 }
 
 /** `agent/channels/slack-ambient.ts` — the ambient (no-mention) Slack channel. */
-export function renderSlackAmbientChannel(): string {
+export function renderSlackAmbientChannel(team: TeamConfig): string {
   return `${BANNER}
 import { createSlackAmbientChannel } from "@deskmate/core/channels/slack-ambient";
 import { DESKMATES } from "../lib/deskmates.js";
 import { CHANNEL_ROUTES } from "../lib/channel-routes.js";
 
-export default createSlackAmbientChannel(DESKMATES, CHANNEL_ROUTES);
+export default createSlackAmbientChannel(DESKMATES, CHANNEL_ROUTES, ${team.frontDesk.maxTurns});
 `;
 }
 

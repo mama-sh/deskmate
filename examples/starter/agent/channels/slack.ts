@@ -3,4 +3,4 @@ import { createSlackChannel } from "@deskmate/core/channels/slack";
 import { DESKMATES } from "../lib/deskmates.js";
 import { CHANNEL_ROUTES } from "../lib/channel-routes.js";
 
-export default createSlackChannel(DESKMATES, CHANNEL_ROUTES);
+export default createSlackChannel(DESKMATES, CHANNEL_ROUTES, 6);

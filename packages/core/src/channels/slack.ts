@@ -68,9 +68,15 @@ type ConveneFields = ConveneState & { convened?: boolean };
  * Build the Deskmate Slack channel for a given roster. The roster supplies the
  * per-deskmate sender identity used when posting replies AS a deskmate; `routes`
  * maps Slack channel ids to the deskmate that should handle them (the generated
- * `agent/lib/channel-routes.ts`, built from `team.channels`).
+ * `agent/lib/channel-routes.ts`, built from `team.channels`). `conveneMaxTurns` is
+ * the per-conversation convene cap from `team.frontDesk.maxTurns` (the generated
+ * shim bakes it in); `DESKMATE_MAX_TURNS` still overrides it at runtime.
  */
-export function createSlackChannel(roster: Roster, routes: Record<string, ChannelRoute> = {}) {
+export function createSlackChannel(
+  roster: Roster,
+  routes: Record<string, ChannelRoute> = {},
+  conveneMaxTurns = 6,
+) {
   return slackChannel({
     credentials: connectSlackCredentials(process.env.SLACK_CONNECTOR ?? "slack/deskmate"),
     onAppMention: (ctx, message) => {
@@ -107,7 +113,7 @@ export function createSlackChannel(roster: Roster, routes: Record<string, Channe
         const text = output?.text?.trim();
         if (!text) return; // nothing to voice
 
-        const decision = nextConveneDecision(channel.state as ConveneState, data.turnId, maxTurns());
+        const decision = nextConveneDecision(channel.state as ConveneState, data.turnId, maxTurns(conveneMaxTurns));
         const cs = channel.state as ConveneFields;
         cs.convenedTurnId = decision.turnId;
         cs.convenedTurns = decision.turns;

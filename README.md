@@ -14,8 +14,12 @@ the Eve app, and `eve deploy`. Pull deskmates from a built-in **catalog** or aut
 your own.
 
 ```bash
-pnpm add @deskmate/core deskmate   # Node 24+ required (see Caveats)
+pnpm add @deskmate/core deskmate eve zod   # Node 24+ required (see Caveats)
 ```
+
+`eve` and `zod` are direct deps: the generated `agent/agent.ts` imports `eve`, the
+copied role tools import `zod`, and you run the `eve` CLI — under pnpm's strict layout
+those must be installed directly, not relied on as transitive deps.
 
 ---
 
@@ -82,8 +86,10 @@ deployable Deskmate driven by a `deskmate.config.ts` (product_analyst + devops).
 build one yourself:
 
 ```bash
-# 1. Install into your project. Node 24+ is required (see Caveats).
-pnpm add @deskmate/core deskmate
+# 1. Install into your project. Node 24+ is required (see Caveats). `eve` + `zod`
+#    are direct deps too — the generated app imports `eve`, the copied role tools
+#    import `zod`, and you run the `eve` CLI.
+pnpm add @deskmate/core deskmate eve zod
 
 # 2. Create deskmate.config.ts (see "Configure your team"), starting minimal:
 #      import { defineTeam } from "@deskmate/core";

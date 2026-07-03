@@ -114,8 +114,12 @@ function rememberEvent(eventId: string | undefined): boolean {
   return false;
 }
 
-export function createSlackAmbientChannel(roster: Roster, routes: Record<string, ChannelRoute> = {}) {
-  const slack = createSlackChannel(roster, routes);
+export function createSlackAmbientChannel(
+  roster: Roster,
+  routes: Record<string, ChannelRoute> = {},
+  conveneMaxTurns = 6,
+) {
+  const slack = createSlackChannel(roster, routes, conveneMaxTurns);
   return defineChannel({
   routes: [
     POST("/eve/v1/slack-ambient", async (req, args) => {

@@ -54,7 +54,7 @@ export function editConfig(
       return;
     }
     writeFileSync(configPath, next);
-    console.log(`✓ added ${label} to ${CONFIG_FILE}`);
+    console.log(`✓ updated ${CONFIG_FILE} (${label})`);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     console.log(`… couldn't edit ${CONFIG_FILE} safely (${reason}). Add ${label} by hand:\n\n${snippet}\n`);

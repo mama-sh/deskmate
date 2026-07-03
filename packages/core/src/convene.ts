@@ -18,7 +18,13 @@ export function nextConveneDecision(
   return { post: true, turnId, turns: prior + 1 };
 }
 
-export function maxTurns(): number {
+/**
+ * The per-conversation convene turn cap. `DESKMATE_MAX_TURNS` (a valid positive
+ * number) is an ops override that wins over everything; otherwise `fallback` — the
+ * consumer's `team.frontDesk.maxTurns`, baked into the generated channel shim — is
+ * used, which itself defaults to 6.
+ */
+export function maxTurns(fallback = 6): number {
   const raw = Number(process.env.DESKMATE_MAX_TURNS);
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 6;
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : fallback;
 }

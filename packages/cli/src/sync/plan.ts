@@ -91,8 +91,8 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
   out("agent/lib/deskmates.ts", renderRosterRegistry(team));
   out("agent/lib/channel-routes.ts", renderChannelRoutes(team));
   out("agent/tools/deskmate_says.ts", renderDeskmateSaysTool());
-  out("agent/channels/slack.ts", renderSlackChannel());
-  out("agent/channels/slack-ambient.ts", renderSlackAmbientChannel());
+  out("agent/channels/slack.ts", renderSlackChannel(team));
+  out("agent/channels/slack-ambient.ts", renderSlackAmbientChannel(team));
   out("agent/channels/eve.ts", renderEveChannel());
   out("agent/channels/deskmate-avatars.ts", renderAvatarsChannel());
   out(".env.example", renderEnvExample(team));
