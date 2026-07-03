@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "eve build",
+  "buildCommand": "deskmate sync && eve build",
   "installCommand": "pnpm install --frozen-lockfile",
   "build": {
     "env": {
