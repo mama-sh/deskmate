@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { renderMcpConnection } from "./lib/mcp-template.js";
 import { appendConnectionEntry, renderEntry } from "./config-file.js";
-import { editConfig } from "./add.js";
+import { CONFIG_FILE, editConfig } from "./add.js";
 
 /**
  * Run `fn` with an `ask(question, fallback)` helper. Buffers stdin lines so it
@@ -67,9 +67,22 @@ export async function mcpAdd(args: string[], cwd: string = process.cwd()): Promi
     writeFileSync(file, renderMcpConnection({ name, urlEnv, tokenEnv, description, tools }));
     console.log(`✓ created connections/${name}.ts`);
 
-    // The config connection entry: kind:"mcp" + the env prefix (<PREFIX>_MCP_URL/_TOKEN).
-    const env = urlEnv.replace(/_MCP_URL$/, "");
-    const entry = { kind: "mcp", env };
+    // The config connection entry: kind:"mcp" + the env prefix. The prefix is only
+    // well-defined when the two env var names have the `<PREFIX>_MCP_URL` /
+    // `<PREFIX>_MCP_TOKEN` shape and share one prefix; otherwise deriving it would
+    // silently emit a wrong `env`, so skip the config entry and say so.
+    const urlPrefix = urlEnv.endsWith("_MCP_URL") ? urlEnv.slice(0, -"_MCP_URL".length) : null;
+    const tokenPrefix = tokenEnv.endsWith("_MCP_TOKEN") ? tokenEnv.slice(0, -"_MCP_TOKEN".length) : null;
+    if (!urlPrefix || !tokenPrefix || urlPrefix !== tokenPrefix) {
+      console.error(
+        `✗ env var names must be <PREFIX>_MCP_URL + <PREFIX>_MCP_TOKEN sharing one prefix ` +
+          `(got ${urlEnv} + ${tokenEnv}). Skipped the connections.${name} config entry — ` +
+          `add it to ${CONFIG_FILE} by hand once the names line up.`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    const entry = { kind: "mcp", env: urlPrefix };
     editConfig(
       cwd,
       name,

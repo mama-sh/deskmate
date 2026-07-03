@@ -180,4 +180,38 @@ describe("planSync", () => {
     expect(b.writes).toEqual(a.writes);
     expect(b.deletes).toEqual(a.deletes);
   });
+
+  it("reads authored files from roles/<d.role> when the deskmate id differs from its role", () => {
+    // `ops` maps to the authored `roles/devops/` tree (id != role). The generated
+    // OUTPUT stays keyed by the id (`agent/subagents/ops/…`); the SOURCE resolves
+    // under roles/devops, so nothing falls back to a stub/placeholder.
+    const team = {
+      ...fixtureTeam,
+      deskmates: {
+        ops: {
+          role: "devops",
+          emoji: ":wrench:",
+          displayName: "Ops",
+          summary: "Aliased devops.",
+          reads: ["sentry"],
+        },
+      },
+    } as unknown as TeamConfig;
+    const plan = planSync(team, cwd);
+
+    // instructions.md — verbatim from roles/devops, NOT the TODO placeholder.
+    const instr = find(plan, "agent/subagents/ops/instructions.md");
+    expect(instr?.contents).toBe(DEVOPS_INSTRUCTIONS);
+    expect(instr?.contents).not.toContain("TODO");
+
+    // tool + connection shims target roles/devops (the role), under the ops subtree.
+    const tool = find(plan, "agent/subagents/ops/tools/x.ts");
+    expect(tool?.contents).toContain('from "../../../../roles/devops/tools/x.js"');
+    const conn = find(plan, "agent/subagents/ops/connections/sentry.ts");
+    expect(conn?.contents).toContain('from "../../../../roles/devops/connections/sentry.js"');
+
+    // skills copied from roles/devops, keyed under the ops subtree.
+    const skill = find(plan, "agent/subagents/ops/skills/logging-observability/SKILL.md");
+    expect(skill?.contents).toBe(SKILL_MD);
+  });
 });

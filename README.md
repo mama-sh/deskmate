@@ -97,12 +97,14 @@ pnpm add @deskmate/core deskmate eve zod
 
 # 3. Pull deskmates from the catalog. Each `add` copies roles/<id>/ into your
 #    repo (instructions, a read tool with seed data, a connection example, a
-#    skill) and appends a roster entry to deskmate.config.ts.
+#    skill), appends a roster entry to deskmate.config.ts, AND seeds a matching
+#    `connections.<provider>` entry for each connection the role reads (with a
+#    default env prefix — the provider name uppercased, editable in the config).
 deskmate list                      # browse the catalog; • marks ones you've added
 deskmate add product_analyst devops
 
-# 4. Declare the connections your roster reads from (step below), then generate
-#    the agent/** tree Eve builds. Runs on plain Node 24 — no build step:
+# 4. Generate the agent/** tree Eve builds. Runs on plain Node 24 — no build step.
+#    (Connections were seeded in step 3; edit their env prefixes first if you like.)
 deskmate sync
 
 # 5. Deploy to YOUR Vercel to turn on the Slack surface.
@@ -203,7 +205,7 @@ The `deskmate` CLI edits your **config + authored files**; `sync` regenerates `a
 
 ```bash
 deskmate list                       # catalog roles; • marks ones you've added
-deskmate add customer_success       # copy roles/customer_success/ + append a config entry
+deskmate add customer_success       # copy roles/customer_success/ + append its roster + connection entries
 deskmate remove growth_hacker       # delete roles/growth_hacker/ + drop its config entry
 deskmate mcp-add <name>             # scaffold a read-only MCP connection into ./connections
 deskmate sync                       # regenerate agent/** from deskmate.config.ts

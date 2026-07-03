@@ -25,10 +25,10 @@ export type SyncPlan = {
   warnings: string[];
 };
 
-// Placeholder written when a deskmate has no authored roles/<id>/instructions.md.
+// Placeholder written when a deskmate has no authored roles/<role>/instructions.md.
 // `deskmate add` always copies one, so this only fires for a hand-added deskmate.
-function missingInstructions(id: string): string {
-  return `# ${id}\n\n<!-- TODO: no authored roles/${id}/instructions.md found. Add one, then re-run \`deskmate sync\`. -->\n`;
+function missingInstructions(id: string, role: string): string {
+  return `# ${id}\n\n<!-- TODO: no authored roles/${role}/instructions.md found. Add one, then re-run \`deskmate sync\`. -->\n`;
 }
 
 /** Directory entries that are themselves directories, sorted for deterministic output. */
@@ -98,42 +98,48 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
   out(".env.example", renderEnvExample(team));
 
   // ── Per-deskmate subagent tree ──────────────────────────────────────────────
+  // OUTPUT paths are keyed by the deskmate `id` (agent/subagents/<id>/…); AUTHORED
+  // SOURCE paths are keyed by `d.role`, so a deskmate whose id differs from its role
+  // (e.g. `ops: { role: "devops" }`) still resolves its authored files under
+  // `roles/<role>/`. `role` is schema-required, so the common id == role case is
+  // unchanged.
   for (const [id, d] of Object.entries(team.deskmates)) {
+    const role = d.role;
     out(`agent/subagents/${id}/agent.ts`, renderSubagentAgent(id));
 
     // instructions.md — authored file copied VERBATIM (byte-for-byte, no banner).
-    const instrPath = join(cwd, "roles", id, "instructions.md");
+    const instrPath = join(cwd, "roles", role, "instructions.md");
     if (existsSync(instrPath)) {
       out(`agent/subagents/${id}/instructions.md`, readFileSync(instrPath, "utf8"));
     } else {
-      out(`agent/subagents/${id}/instructions.md`, missingInstructions(id));
-      warnings.push(`deskmate "${id}": no authored roles/${id}/instructions.md — wrote a TODO placeholder.`);
+      out(`agent/subagents/${id}/instructions.md`, missingInstructions(id, role));
+      warnings.push(`deskmate "${id}": no authored roles/${role}/instructions.md — wrote a TODO placeholder.`);
     }
 
-    // tools/<tool>.ts — one re-export shim per authored roles/<id>/tools/*.ts.
-    for (const tool of tsFiles(join(cwd, "roles", id, "tools"))) {
+    // tools/<tool>.ts — one re-export shim per authored roles/<role>/tools/*.ts.
+    for (const tool of tsFiles(join(cwd, "roles", role, "tools"))) {
       out(
         `agent/subagents/${id}/tools/${tool}`,
-        renderReexport(`../../../../roles/${id}/tools/${tool.replace(/\.ts$/, ".js")}`, { star: true }),
+        renderReexport(`../../../../roles/${role}/tools/${tool.replace(/\.ts$/, ".js")}`, { star: true }),
       );
     }
 
     // connections/<name>.ts — one shim per `reads` name. Resolution order:
-    //   1. deskmate-local  roles/<id>/connections/<name>.ts
+    //   1. deskmate-local  roles/<role>/connections/<name>.ts
     //   2. shared          connections/<name>.ts   (repo root)
     //   3. TODO stub       (neither exists — don't crash)
     for (const name of d.reads) {
-      const local = join(cwd, "roles", id, "connections", `${name}.ts`);
+      const local = join(cwd, "roles", role, "connections", `${name}.ts`);
       const shared = join(cwd, "connections", `${name}.ts`);
       let contents: string;
       if (existsSync(local)) {
-        contents = renderReexport(`../../../../roles/${id}/connections/${name}.js`, { star: true });
+        contents = renderReexport(`../../../../roles/${role}/connections/${name}.js`, { star: true });
       } else if (existsSync(shared)) {
         contents = renderReexport(`../../../../connections/${name}.js`, { star: true });
       } else {
         contents = renderStubConnection(name, team.connections[name]?.env);
         warnings.push(
-          `deskmate "${id}": connection "${name}" has no authored file (roles/${id}/connections/${name}.ts ` +
+          `deskmate "${id}": connection "${name}" has no authored file (roles/${role}/connections/${name}.ts ` +
             `or connections/${name}.ts) — wrote a TODO stub.`,
         );
       }
@@ -145,7 +151,7 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
     // are markdown/asset files Eve discovers under agent/subagents/<id>/skills/;
     // they are copied like instructions.md (no shim, no banner). The `skill`
     // field in the config stays metadata — sync just copies the tree.
-    const skillsRoot = join(cwd, "roles", id, "skills");
+    const skillsRoot = join(cwd, "roles", role, "skills");
     for (const rel of walkFiles(skillsRoot)) {
       out(`agent/subagents/${id}/skills/${rel}`, readFileSync(join(skillsRoot, rel), "utf8"));
     }

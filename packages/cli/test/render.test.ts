@@ -12,6 +12,7 @@ import {
   renderDeskmateSaysTool,
   renderFrontDeskInstructions,
   renderEnvExample,
+  renderStubConnection,
 } from "../src/sync/render.js";
 
 // A minimal, hand-built TeamConfig fixture (two deskmates, two mcp connections).
@@ -180,5 +181,22 @@ describe("renderEnvExample", () => {
   it("skips non-mcp connections", () => {
     const out = renderEnvExample(fixtureTeam);
     expect(out).not.toContain("LEDGER_MCP_URL=");
+  });
+});
+
+describe("renderStubConnection", () => {
+  it("reads env vars via bracket access (valid TS even for a non-identifier prefix)", () => {
+    const out = renderStubConnection("weird", "123");
+    expect(out).toContain('process.env["123_MCP_URL"]');
+    expect(out).toContain('process.env["123_MCP_TOKEN"]');
+    // Dot access on a non-identifier prefix would be a TS/JS syntax error.
+    expect(out).not.toContain("process.env.123_MCP_URL");
+    expect(out).not.toContain("process.env.123_MCP_TOKEN");
+  });
+
+  it("derives the env prefix from the name when none is given, still bracketed", () => {
+    const out = renderStubConnection("my_conn", undefined);
+    expect(out).toContain('process.env["MY_CONN_MCP_URL"]');
+    expect(out).toContain('process.env["MY_CONN_MCP_TOKEN"]');
   });
 });

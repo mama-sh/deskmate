@@ -1,7 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { resolveCatalogRoot } from "./catalog.js";
-import { appendDeskmateEntry, renderEntry } from "./config-file.js";
+import { appendConnectionEntry, appendDeskmateEntry, renderEntry } from "./config-file.js";
 
 export const CONFIG_FILE = "deskmate.config.ts";
 
@@ -92,5 +92,30 @@ export function add(ids: string[], cwd: string = process.cwd()): void {
       renderEntry(id, entry),
       `${id}: already in ${CONFIG_FILE}`,
     );
+
+    // Seed a matching `connections.<provider>` for each provider the role reads —
+    // without it `defineTeam` rejects the `reads` value as an unknown connection,
+    // so the documented `deskmate add … && deskmate sync` would fail. Idempotent:
+    // an already-present connection is left untouched (its env prefix is kept).
+    const providers = role.providers ?? [];
+    for (const provider of providers) {
+      const env = provider.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+      const connEntry = { kind: "mcp", env };
+      editConfig(
+        cwd,
+        `connections.${provider}`,
+        (s) => appendConnectionEntry(s, provider, connEntry),
+        renderEntry(provider, connEntry),
+        `${provider}: already in connections`,
+      );
+    }
+    if (providers.length) {
+      const prefixes = providers
+        .map((p) => `${p} (${p.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_MCP_URL/_TOKEN)`)
+        .join(", ");
+      console.log(
+        `  seeded connection(s): ${prefixes} — set those env vars, or edit the env prefix in ${CONFIG_FILE}.`,
+      );
+    }
   }
 }
