@@ -53,6 +53,23 @@ function tsFiles(dir: string): string[] {
 }
 
 /**
+ * Every file under `root`, recursively, as POSIX-style paths relative to `root`
+ * (including dotfiles/dirs like `templates/.github/…`). Entries are sorted at each
+ * directory level, so the flattened list is deterministic → idempotent writes.
+ */
+function walkFiles(root: string, prefix = ""): string[] {
+  if (!existsSync(root)) return [];
+  const out: string[] = [];
+  for (const name of readdirSync(root).sort()) {
+    const abs = join(root, name);
+    const rel = prefix ? `${prefix}/${name}` : name;
+    if (statSync(abs).isDirectory()) out.push(...walkFiles(abs, rel));
+    else out.push(rel);
+  }
+  return out;
+}
+
+/**
  * Compute the full set of file writes + directory deletes that rebuild `agent/**`
  * from the consumer's `deskmate.config.ts` (passed in as a parsed `team` object)
  * and their authored `roles/<id>/` + shared `connections/` files under `cwd`.
@@ -119,6 +136,16 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
         );
       }
       out(`agent/subagents/${id}/connections/${name}.ts`, contents);
+    }
+
+    // skills/** — the deskmate's authored skill playbooks (SKILL.md + rules/
+    // references/templates), copied VERBATIM with their nested structure. These
+    // are markdown/asset files Eve discovers under agent/subagents/<id>/skills/;
+    // they are copied like instructions.md (no shim, no banner). The `skill`
+    // field in the config stays metadata — sync just copies the tree.
+    const skillsRoot = join(cwd, "roles", id, "skills");
+    for (const rel of walkFiles(skillsRoot)) {
+      out(`agent/subagents/${id}/skills/${rel}`, readFileSync(join(skillsRoot, rel), "utf8"));
     }
   }
 
