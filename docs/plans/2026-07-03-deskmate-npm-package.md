@@ -519,7 +519,31 @@ Expected: sync writes the tree; typecheck passes. (`eve build` requires Vercel/e
 
 ---
 
-## Task 8: Test sweep + CI
+## Task 8: Package build (core + cli → compiled .js), verify eve build
+
+**Why:** a distributed library run at runtime must ship `.js` — Node doesn't type-strip inside `node_modules`, so eve fails to load a `.ts`-only externalized `@deskmate/core`. The consumer stays no-build; the library packages get a build.
+
+**Files:**
+- Create: `packages/core/tsconfig.build.json` (extends base; `noEmit:false`, `declaration:true`, `outDir:"dist"`, `rootDir:"src"`), `packages/cli/tsconfig.build.json`.
+- Modify: `packages/core/package.json` (`build` script = `tsc -p tsconfig.build.json` + copy the `.md` asset into `dist/`; `exports` → `dist/*.js` + `dist/*.d.ts`; `files:["dist"]`), same for `packages/cli` (`bin` → `dist/cli.js`).
+
+**Steps:**
+1. Give core a `dist` build (tsc emit + declarations). Copy `src/front-desk-instructions.md` → `dist/` (the loader reads it via `import.meta.url`).
+2. Repoint core `exports` (`.`, `./channels/*`, `./deskmate-says`, `./front-desk-instructions`) at `dist/*.js` with `types` → `dist/*.d.ts`.
+3. Give cli a `dist` build; `bin.deskmate` → `dist/cli.js` (shebang preserved); verify `resolveCatalogRoot()` still finds the sibling catalog from `dist/`.
+4. Build order: core before cli (topological). Add a root `build:packages` (or `pnpm -r --filter './packages/*' build`).
+5. **Verify on Node 24:** build packages → run `deskmate sync` in `examples/starter` via **plain** `node packages/cli/dist/cli.js sync` (no tsx) → run `eve build` → it should complete clean now that core loads as real `.js`. Report verbatim.
+6. Regression: `pnpm -r test` + `pnpm -r typecheck` still green; the generated tree still typechecks against the built `dist` `.d.ts`.
+
+**Acceptance:**
+- [ ] `@deskmate/core` + `deskmate` build to `dist/` (`.js` + `.d.ts`); exports/bin point at `dist`
+- [ ] `deskmate sync` runs under plain Node 24 (no tsx)
+- [ ] `examples/starter` `eve build` completes clean on Node 24
+- [ ] `pnpm -r test`/`typecheck` still green
+
+---
+
+## Task 9: Test sweep + CI
 
 **Files:**
 - Create: `.github/workflows/ci.yml`
@@ -535,7 +559,7 @@ Expected: sync writes the tree; typecheck passes. (`eve build` requires Vercel/e
 
 ---
 
-## Task 9: README + docs
+## Task 10: README + docs
 
 **Files:**
 - Modify: `README.md` (install → configure → sync → deploy flow; remove fork-first framing)
@@ -555,3 +579,26 @@ Expected: sync writes the tree; typecheck passes. (`eve build` requires Vercel/e
 
 0 → 1 → (2, 3 after 1) → 4 → 5 (after 4) → 6 (after 2,3,5) → 7 (after 6) → 8 (after 7) → 9 (after 7).
 Tasks 2 and 3 can run in parallel once 1 lands. Task 4 can run in parallel with 1–3.
+
+---
+
+## Execution notes (living — updated as tasks land)
+
+Contracts and corrections discovered during execution. **Task 6 (sync) and Task 7 must honor these.**
+
+- **Test count:** the pre-migration suite is **32 tests / 12 files** (plan's "14" was stale). After Task 1, `@deskmate/core` owns 15 (4 files); root retains 20 (8 files: env, five `get_*`, record_decision, mcp-template).
+- **Root package renamed** `deskmate` → `deskmate-monorepo` (+`private: true`) to avoid a name collision with the CLI package `deskmate`. (Task 0)
+- **Channel factory contract** (Task 1): `@deskmate/core` channels are roster-parameterized factories — `createSlackChannel(roster)` and `createSlackAmbientChannel(roster)`. `eve` and the avatar-serving `deskmate-avatars` channels are roster-free default exports. The generated shims Task 6 emits must be:
+  - `agent/channels/slack.ts` → `export default createSlackChannel(DESKMATES)` (roster from generated `agent/lib/deskmates.ts`)
+  - `agent/channels/slack-ambient.ts` → `export default createSlackAmbientChannel(DESKMATES)`
+  - `agent/channels/eve.ts`, `agent/channels/deskmate-avatars.ts` → re-export core's default channels
+  - `agent/tools/deskmate_says.ts` → shim to core's `deskmate-says` (front desk needs it wired; legacy `instructions.md` still references it in prose)
+- **Core `exports` map** currently only has `"."`. Task 6 must add subpath exports (`./channels/*`, `./deskmate-says`) OR re-export the channel factories + `deskmate_says` from `index.ts`, so generated shims can import them.
+- **Convene export names** are `nextConveneDecision` / `maxTurns` (the plan's `conveneTurnDecision` was a typo — no such symbol).
+- **Node version:** the CLI bin is `./src/cli.ts` run via `node`. Local env here is Node 22; native TS type-stripping is stable on Node ≥23.6/24. When Task 6/7 run `deskmate sync` via `node`, add `--experimental-strip-types` (or a TS runner) if on Node <23.6. Production (Vercel) is Node 24, fine.
+- **slack-ambient dispatch:** its factory builds a fresh slack channel instance for `args.receive`; verify this path when the example app is assembled (Task 7).
+- **Task 6 connection decision (controller):** connection CODE is NOT regenerated from the sparse config spec (which lacks description + tools.allow). Instead `sync` writes per-deskmate connection files as **re-export shims to the consumer's authored connection files** (`roles/<id>/connections/<name>.ts` from `deskmate add`, or a shared `connections/<name>.ts` from `mcp-add`). The config's `connections` block is used for validation + `.env.example` regen + declaring the set; the env-driven URL/token already lives inside the authored connection file. This supersedes the plan's 6a `renderMcpConnectionFromConfig` sketch.
+- **Front desk needs a core template:** the legacy `agent/instructions.md` (routing/convene prose) was NOT moved in Task 1. Task 6 moves it into `@deskmate/core` as the front-desk instructions template that `sync` writes to the generated `agent/instructions.md`.
+- **Core exports to add in Task 6:** subpath exports (or index re-exports) for the channel factories (`createSlackChannel`/`createSlackAmbientChannel`), the default `eve`/`deskmate-avatars` channels, and `deskmate_says`, so generated shims can import them.
+- **PACKAGING CORRECTION (Task 7 finding — supersedes the "no build step / exports → .ts" premise in Task 0 & the header):** the *consumer* app stays no-build (Node 24 type-strips their `.ts`; `deskmate sync` is the only step). But the *distributed library packages* (`@deskmate/core`, the `deskmate` CLI) MUST be compiled to `.js` (+ `.d.ts`) with `exports`/`bin` → `dist/`. Node does NOT type-strip files inside `node_modules`, so a `.ts`-only package fails to load once eve externalizes it (`Cannot find module …/deskmate-avatars.js`), and plain `node cli.ts` can't resolve the CLI's `.js`-specifier→`.ts` imports. The `build.externalDependencies: ["@deskmate/core"]` in the generated root agent (commit `523cc5a`) is correct and stays; it only fully works once core ships `.js`. → new Task 8 (package build) precedes CI.
+- **Task 8 RESULT (`bf270bd`): pipeline proven.** core + cli compile to `dist/*.js`+`.d.ts` (exports/bin → dist; `.md` asset copied into core `dist`). On Node 24: plain-node `deskmate sync` works (no tsx), and `examples/starter` `eve build` **completes clean (exit 0)** — full `.output/server` bundle, `@deskmate/core` externalized+traced. Two items pushed to Task 9: (a) `dist` is gitignored → CI/Vercel gate order is load-bearing (install → `build:packages` → typecheck/test/build), and the example's `vercel.json` buildCommand must build packages before `deskmate sync && eve build` (real consumers get `dist` via published node_modules, so they don't); (b) `files:["dist"]` drops the catalog from a published CLI → the CLI build must bundle `packages/catalog/roles` into `dist/` (+ files) so `deskmate add`/`list` work for real npm users.
