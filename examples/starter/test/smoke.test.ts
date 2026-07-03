@@ -34,6 +34,7 @@ describe("generated agent/** tree matches deskmate.config.ts", () => {
     expect(exists("agent.ts")).toBe(true);
     expect(exists("instructions.md")).toBe(true);
     expect(exists("lib", "deskmates.ts")).toBe(true);
+    expect(exists("lib", "channel-routes.ts")).toBe(true);
     expect(exists("tools", "deskmate_says.ts")).toBe(true);
   });
 

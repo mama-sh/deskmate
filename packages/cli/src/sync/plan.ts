@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { TeamConfig } from "@deskmate/core";
 import {
   renderAvatarsChannel,
+  renderChannelRoutes,
   renderDeskmateSaysTool,
   renderEnvExample,
   renderEveChannel,
@@ -88,6 +89,7 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
   out("agent/agent.ts", renderRootAgent(team));
   out("agent/instructions.md", renderFrontDeskInstructions());
   out("agent/lib/deskmates.ts", renderRosterRegistry(team));
+  out("agent/lib/channel-routes.ts", renderChannelRoutes(team));
   out("agent/tools/deskmate_says.ts", renderDeskmateSaysTool());
   out("agent/channels/slack.ts", renderSlackChannel());
   out("agent/channels/slack-ambient.ts", renderSlackAmbientChannel());

@@ -39,7 +39,17 @@ export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
 
   const plan = planSync(team, cwd);
 
-  // Remove stale generated subagent dirs, then (re)write the whole tree.
+  // `sync` OWNS each surviving deskmate's generated subtree: wipe it before writing
+  // so a tool/skill/connection removed from the authored `roles/<id>/` can't leave a
+  // dangling generated shim behind (a stale shim imports a now-missing file and
+  // breaks `eve build`). The planned writes below recreate the subtree fresh. Only
+  // ever touches generated `agent/**` — the authored `roles/**` is never removed.
+  for (const id of Object.keys(team.deskmates)) {
+    rmSync(join(cwd, "agent", "subagents", id), { recursive: true, force: true });
+  }
+
+  // Remove stale generated subagent dirs for deskmates no longer in the config, then
+  // (re)write the whole tree.
   for (const del of plan.deletes) rmSync(del, { recursive: true, force: true });
   for (const { path, contents } of plan.writes) {
     mkdirSync(dirname(path), { recursive: true });

@@ -3,14 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "imports": {
-    "#*": "./agent/*",
-    "#evals/*": "./evals/*"
-  },
   "scripts": {
-    "build": "eve build",
-    "dev": "eve dev",
-    "start": "eve start",
     "typecheck": "tsc",
     "test": "vitest run --passWithNoTests",
     "build:packages": "pnpm -r --filter=\"./packages/*\" build",

@@ -4,6 +4,7 @@ import {
   BANNER,
   renderRootAgent,
   renderRosterRegistry,
+  renderChannelRoutes,
   renderSubagentAgent,
   renderReexport,
   renderSlackChannel,
@@ -111,25 +112,49 @@ describe("renderReexport", () => {
 });
 
 describe("channel + tool shims", () => {
-  it("slack channel shim calls createSlackChannel(DESKMATES)", () => {
+  it("slack channel shim calls createSlackChannel(DESKMATES, CHANNEL_ROUTES)", () => {
     const out = renderSlackChannel();
     expect(out.startsWith(BANNER)).toBe(true);
     expect(out).toContain('import { createSlackChannel } from "@deskmate/core/channels/slack";');
     expect(out).toContain('import { DESKMATES } from "../lib/deskmates.js";');
-    expect(out).toContain("export default createSlackChannel(DESKMATES);");
+    expect(out).toContain('import { CHANNEL_ROUTES } from "../lib/channel-routes.js";');
+    expect(out).toContain("export default createSlackChannel(DESKMATES, CHANNEL_ROUTES);");
   });
 
-  it("slack-ambient shim calls createSlackAmbientChannel(DESKMATES)", () => {
+  it("slack-ambient shim calls createSlackAmbientChannel(DESKMATES, CHANNEL_ROUTES)", () => {
     const out = renderSlackAmbientChannel();
     expect(out).toContain(
       'import { createSlackAmbientChannel } from "@deskmate/core/channels/slack-ambient";',
     );
-    expect(out).toContain("export default createSlackAmbientChannel(DESKMATES);");
+    expect(out).toContain('import { CHANNEL_ROUTES } from "../lib/channel-routes.js";');
+    expect(out).toContain("export default createSlackAmbientChannel(DESKMATES, CHANNEL_ROUTES);");
   });
 
   it("deskmate_says tool shim re-exports the core tool", () => {
     const out = renderDeskmateSaysTool();
     expect(out).toContain('export { default } from "@deskmate/core/deskmate-says";');
+  });
+});
+
+describe("renderChannelRoutes", () => {
+  it("emits an empty CHANNEL_ROUTES map when the team has no channels", () => {
+    const out = renderChannelRoutes(fixtureTeam);
+    expect(out.startsWith(BANNER)).toBe(true);
+    expect(out).toContain('import type { ChannelRoute } from "@deskmate/core";');
+    expect(out).toContain("export const CHANNEL_ROUTES: Record<string, ChannelRoute> = {");
+  });
+
+  it("emits one entry per team.channels mapping, preserving deskmate + lock", () => {
+    const team = {
+      ...fixtureTeam,
+      channels: {
+        C0INCIDENTS: { deskmate: "devops", lock: true },
+        C0GROWTH: { deskmate: "product_analyst" },
+      },
+    } as unknown as TeamConfig;
+    const out = renderChannelRoutes(team);
+    expect(out).toContain('"C0INCIDENTS": {"deskmate":"devops","lock":true}');
+    expect(out).toContain('"C0GROWTH": {"deskmate":"product_analyst"}');
   });
 });
 

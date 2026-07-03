@@ -12,8 +12,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@deskmate/core": "workspace:*",
-    "zod": "4.4.3"
+    "@deskmate/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.x",

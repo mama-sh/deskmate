@@ -86,6 +86,7 @@ describe("planSync", () => {
       "agent/agent.ts",
       "agent/instructions.md",
       "agent/lib/deskmates.ts",
+      "agent/lib/channel-routes.ts",
       "agent/tools/deskmate_says.ts",
       "agent/channels/slack.ts",
       "agent/channels/slack-ambient.ts",
@@ -95,6 +96,18 @@ describe("planSync", () => {
     ]) {
       expect(ps).toContain(join(cwd, rel));
     }
+  });
+
+  it("generates agent/lib/channel-routes.ts from team.channels", () => {
+    const teamWithChannels = {
+      ...fixtureTeam,
+      channels: { C1: { deskmate: "devops", lock: true } },
+    } as unknown as TeamConfig;
+    const plan = planSync(teamWithChannels, cwd);
+    const write = find(plan, "agent/lib/channel-routes.ts");
+    expect(write).toBeDefined();
+    expect(write?.contents).toContain("export const CHANNEL_ROUTES: Record<string, ChannelRoute> = {");
+    expect(write?.contents).toContain('"C1": {"deskmate":"devops","lock":true}');
   });
 
   it("plans each deskmate's subagent files", () => {

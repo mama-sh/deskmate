@@ -2,6 +2,7 @@ import { connectSlackCredentials } from "@vercel/connect/eve";
 import { defineChannel, POST } from "eve/channels";
 import { generateText } from "ai";
 import { createSlackChannel } from "./slack.js";
+import type { ChannelRoute } from "../channel-routes.js";
 import type { Roster } from "../roster.js";
 
 // ── Ambient thread participation ──────────────────────────────────────────────
@@ -113,8 +114,8 @@ function rememberEvent(eventId: string | undefined): boolean {
   return false;
 }
 
-export function createSlackAmbientChannel(roster: Roster) {
-  const slack = createSlackChannel(roster);
+export function createSlackAmbientChannel(roster: Roster, routes: Record<string, ChannelRoute> = {}) {
+  const slack = createSlackChannel(roster, routes);
   return defineChannel({
   routes: [
     POST("/eve/v1/slack-ambient", async (req, args) => {

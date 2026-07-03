@@ -1,12 +1,9 @@
 import { z } from "zod";
 
 const ConnectionConfig = z.object({
-  kind: z.enum(["mcp", "tool"]),
-  env: z.string().optional(),      // env prefix → <ENV>_MCP_URL/_TOKEN for kind:"mcp"
-  repo: z.string().optional(),
-  from: z.string().optional(),     // module path for kind:"tool"
-  apps: z.array(z.string()).optional(),
-}).passthrough();
+  kind: z.literal("mcp"),
+  env: z.string().optional(),      // env prefix → <ENV>_MCP_URL/_TOKEN
+});
 
 const DeskmateConfig = z.object({
   role: z.string(),
@@ -16,8 +13,6 @@ const DeskmateConfig = z.object({
   reads: z.array(z.string()).default([]),
   model: z.string().optional(),
   skill: z.string().optional(),
-  instructions: z.string().optional(), // path override; defaults to roles/<id>/instructions.md
-  tools: z.array(z.string()).optional(),
 });
 
 const ChannelRoute = z.object({ deskmate: z.string(), lock: z.boolean().optional() });
@@ -37,8 +32,29 @@ export type TeamConfig = z.infer<typeof TeamConfig>;
 export type DeskmateConfig = z.infer<typeof DeskmateConfig>;
 export type ConnectionConfig = z.infer<typeof ConnectionConfig>;
 
+// Deskmate ids and connection names become directory names AND import specifiers in
+// the generated `agent/**` tree, so they must be safe snake_case identifiers (same
+// guard as `deskmate mcp-add`). Channel keys are exempt — they are Slack channel ids.
+const IDENTIFIER_RE = /^[a-z][a-z0-9_]*$/;
+
 export function defineTeam(input: unknown): TeamConfig {
   const team = TeamConfig.parse(input);
+  for (const id of Object.keys(team.deskmates)) {
+    if (!IDENTIFIER_RE.test(id)) {
+      throw new Error(
+        `deskmate id "${id}" must be snake_case (a lowercase letter, then letters/digits/underscores) — ` +
+          `it becomes a directory name and import specifier.`,
+      );
+    }
+  }
+  for (const name of Object.keys(team.connections)) {
+    if (!IDENTIFIER_RE.test(name)) {
+      throw new Error(
+        `connection name "${name}" must be snake_case (a lowercase letter, then letters/digits/underscores) — ` +
+          `it becomes a directory name and import specifier.`,
+      );
+    }
+  }
   for (const [id, d] of Object.entries(team.deskmates)) {
     for (const r of d.reads) {
       if (!team.connections[r]) throw new Error(`deskmate "${id}" reads unknown connection "${r}"`);

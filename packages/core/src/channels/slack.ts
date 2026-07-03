@@ -1,6 +1,6 @@
 import { connectSlackCredentials } from "@vercel/connect/eve";
 import { defaultSlackAuth, slackChannel } from "eve/channels/slack";
-import { resolveRoute } from "../channel-routes.js";
+import { resolveRoute, type ChannelRoute } from "../channel-routes.js";
 import { chunkMarkdown, deskmateSlackIdentity } from "../deskmate-identity.js";
 import { maxTurns, nextConveneDecision, type ConveneState } from "../convene.js";
 import type { Roster } from "../roster.js";
@@ -66,14 +66,16 @@ type ConveneFields = ConveneState & { convened?: boolean };
 
 /**
  * Build the Deskmate Slack channel for a given roster. The roster supplies the
- * per-deskmate sender identity used when posting replies AS a deskmate.
+ * per-deskmate sender identity used when posting replies AS a deskmate; `routes`
+ * maps Slack channel ids to the deskmate that should handle them (the generated
+ * `agent/lib/channel-routes.ts`, built from `team.channels`).
  */
-export function createSlackChannel(roster: Roster) {
+export function createSlackChannel(roster: Roster, routes: Record<string, ChannelRoute> = {}) {
   return slackChannel({
     credentials: connectSlackCredentials(process.env.SLACK_CONNECTOR ?? "slack/deskmate"),
     onAppMention: (ctx, message) => {
       const auth = defaultSlackAuth(message, ctx);
-      const route = resolveRoute({ id: message.channelId });
+      const route = resolveRoute({ id: message.channelId }, routes);
       if (!route) return { auth };
       const directive = route.lock
         ? `[routing] This Slack channel is dedicated to the \`${route.deskmate}\` deskmate. ` +

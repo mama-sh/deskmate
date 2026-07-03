@@ -5,7 +5,7 @@ describe("defineTeam", () => {
   it("applies defaults (maxTurns 6) and returns a normalized team", () => {
     const team = defineTeam({
       deskmates: { devops: { role: "devops", emoji: "🔧", displayName: "DevOps Engineer", summary: "…", reads: ["github"] } },
-      connections: { github: { kind: "mcp", env: "GITHUB", repo: "acme/app" } },
+      connections: { github: { kind: "mcp", env: "GITHUB" } },
     });
     expect(team.frontDesk.maxTurns).toBe(6);
     expect(team.deskmates.devops.reads).toEqual(["github"]);
@@ -29,5 +29,32 @@ describe("defineTeam", () => {
         channels: { C1: { deskmate: "ghost" } },
       }),
     ).toThrow(/unknown deskmate/i);
+  });
+
+  it("rejects a deskmate id that isn't a snake_case identifier", () => {
+    expect(() =>
+      defineTeam({
+        deskmates: { "Bad-Id": { role: "x", emoji: "x", displayName: "x", summary: "…", reads: [] } },
+        connections: {},
+      }),
+    ).toThrow(/snake_case/i);
+  });
+
+  it("rejects a connection name that isn't a snake_case identifier", () => {
+    expect(() =>
+      defineTeam({
+        deskmates: {},
+        connections: { "Bad-Name": { kind: "mcp" } },
+      }),
+    ).toThrow(/snake_case/i);
+  });
+
+  it("allows uppercase Slack channel ids as channel keys (not identifier-guarded)", () => {
+    const team = defineTeam({
+      deskmates: { devops: { role: "devops", emoji: "🔧", displayName: "D", summary: "…", reads: [] } },
+      connections: {},
+      channels: { C0INCIDENTS: { deskmate: "devops", lock: true } },
+    });
+    expect(team.channels.C0INCIDENTS).toEqual({ deskmate: "devops", lock: true });
   });
 });
