@@ -68,6 +68,7 @@ export function renderChannelRoutes(team: TeamConfig): string {
   const entries = Object.entries(team.channels).map(([channel, route]) => {
     const value: ChannelRoute = { deskmate: route.deskmate };
     if (route.lock !== undefined) value.lock = route.lock;
+    if (route.watch !== undefined) value.watch = route.watch;
     return `  ${JSON.stringify(channel)}: ${JSON.stringify(value)},`;
   });
   return `${BANNER}

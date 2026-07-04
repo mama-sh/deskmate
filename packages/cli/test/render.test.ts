@@ -158,6 +158,20 @@ describe("renderChannelRoutes", () => {
     expect(out).toContain('"C0INCIDENTS": {"deskmate":"devops","lock":true}');
     expect(out).toContain('"C0GROWTH": {"deskmate":"product_analyst"}');
   });
+
+  it("serializes the watch block deterministically", () => {
+    const team = {
+      ...fixtureTeam,
+      channels: { C0INC: { deskmate: "devops", lock: true, watch: { react: true, reply: true, post: false, picker: "routed" } } },
+    } as unknown as TeamConfig;
+    const out = renderChannelRoutes(team);
+    expect(out).toContain('"C0INC": {"deskmate":"devops","lock":true,"watch":{"react":true,"reply":true,"post":false,"picker":"routed"}}');
+  });
+
+  it("omits watch when the route has none", () => {
+    const team = { ...fixtureTeam, channels: { C0G: { deskmate: "product_analyst" } } } as unknown as TeamConfig;
+    expect(renderChannelRoutes(team)).toContain('"C0G": {"deskmate":"product_analyst"}');
+  });
 });
 
 describe("renderFrontDeskInstructions", () => {
