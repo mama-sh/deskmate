@@ -35,3 +35,38 @@ export function resolveRoute(
   if (!key) return null;
   return { deskmate: routes[key].deskmate, lock: routes[key].lock ?? false };
 }
+
+export const DEFAULT_REACTION_PALETTE = ["eyes", "white_check_mark", "tada", "warning", "+1"];
+
+export type EffectiveWatch = {
+  react: boolean; reply: boolean; post: boolean; approvePosts: boolean;
+  picker: "routed" | "frontdesk"; palette: string[];
+  replyCooldownMin: number; postDailyCap: number;
+};
+
+function numEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** True when the whole watch layer is switched off by ops. */
+export function watchDisabled(): boolean {
+  return !!process.env.DESKMATE_WATCH_DISABLED;
+}
+
+/** Effective, defaulted watch settings for a route, or null when the channel isn't watched. */
+export function resolveWatch(route: ChannelRoute | null | undefined): EffectiveWatch | null {
+  const w = route?.watch;
+  if (!w) return null;
+  return {
+    react: w.react ?? true,
+    reply: w.reply ?? true,
+    post: w.post ?? false,
+    approvePosts: w.approvePosts ?? false,
+    picker: w.picker ?? "routed",
+    palette: w.reactionPalette ?? DEFAULT_REACTION_PALETTE,
+    replyCooldownMin: numEnv("DESKMATE_REPLY_COOLDOWN_MIN", 10),
+    postDailyCap: numEnv("DESKMATE_POST_DAILY_CAP", 3),
+  };
+}
