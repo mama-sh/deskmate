@@ -93,8 +93,15 @@ async function postDailyCapReached(channelId: string, botUserId: string, cap: nu
   if (cap <= 0) return true;
   const oldest = (Math.floor(Date.now() / 1000) - 24 * 60 * 60).toString();
   const r = await slackApi("conversations.history", { channel: channelId, oldest, limit: 100 });
-  const messages: any[] = r?.ok && Array.isArray(r.messages) ? r.messages : [];
-  const mine = messages.filter((m) => m?.user === botUserId && !m?.thread_ts).length;
+  // Fail closed: if history can't be read, treat the cap as reached rather than risk
+  // spamming — this gates the riskiest action (classifyEvent is fail-closed too).
+  if (!r?.ok || !Array.isArray(r.messages)) return true;
+  // Count the bot's own TOP-LEVEL posts: standalone (no thread_ts) OR a thread parent
+  // (thread_ts === ts). A post that later gets replies becomes a parent, so filtering
+  // on !thread_ts alone would under-count and let extra posts slip past the cap.
+  const mine = r.messages.filter(
+    (m: any) => m?.user === botUserId && (!m?.thread_ts || m?.thread_ts === m?.ts),
+  ).length;
   return mine >= cap;
 }
 
@@ -210,7 +217,13 @@ export function createSlackAmbientChannel(
               await addReaction(channelId, event.ts, verdict.emoji);
               return;
             }
+            // Only reply/post reach the dispatch below. Anything else (a react verdict
+            // that somehow lost its emoji, or a future action) does nothing — keep that
+            // contract local instead of relying on clampVerdict two modules away.
+            if (verdict.action !== "reply" && verdict.action !== "post") return;
 
+            // Reply cooldown is per-thread (messages come from this thread's replies):
+            // don't pile multiple replies into one thread in quick succession.
             if (
               verdict.action === "reply" &&
               withinCooldown(messages, botUserId, Number.parseFloat(event.ts), watch.replyCooldownMin)
