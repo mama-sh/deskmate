@@ -197,17 +197,39 @@ describe("planSync", () => {
     expect(plan.deletes).not.toContain(join(cwd, "agent/subagents/devops"));
   });
 
-  it("emits the sweep schedule only when a channel opts into digest", () => {
-    const withDigest = {
+  it("emits the sweep schedule only when a channel opts into digest AND post", () => {
+    const withSweep = {
+      ...fixtureTeam,
+      channels: { C0A: { deskmate: "devops", watch: { digest: true, post: true } } },
+    } as unknown as TeamConfig;
+    const plan = planSync(withSweep, cwd);
+    expect(plan.writes.some((w) => w.path.endsWith("agent/schedules/deskmate-sweep.ts"))).toBe(true);
+
+    // digest WITHOUT post: no sweep (a sweep can only post top-level), plus a warning.
+    const digestNoPost = {
       ...fixtureTeam,
       channels: { C0A: { deskmate: "devops", watch: { digest: true } } },
     } as unknown as TeamConfig;
-    const plan = planSync(withDigest, cwd);
-    expect(plan.writes.some((w) => w.path.endsWith("agent/schedules/deskmate-sweep.ts"))).toBe(true);
-
-    const noDigest = { ...fixtureTeam, channels: {} } as unknown as TeamConfig;
-    const plan2 = planSync(noDigest, cwd);
+    const plan2 = planSync(digestNoPost, cwd);
     expect(plan2.writes.some((w) => w.path.endsWith("agent/schedules/deskmate-sweep.ts"))).toBe(false);
+    expect(plan2.warnings.some((w) => w.includes("watch.post: true"))).toBe(true);
+
+    // no digest at all: no sweep, no warning.
+    const noDigest = { ...fixtureTeam, channels: {} } as unknown as TeamConfig;
+    const plan3 = planSync(noDigest, cwd);
+    expect(plan3.writes.some((w) => w.path.endsWith("agent/schedules/deskmate-sweep.ts"))).toBe(false);
+  });
+
+  it("deletes a stale generated sweep file when no channel qualifies", () => {
+    const rel = "agent/schedules/deskmate-sweep.ts";
+    mkdirSync(join(cwd, "agent/schedules"), { recursive: true });
+    writeFileSync(join(cwd, rel), "// stale\n");
+    try {
+      const plan = planSync({ ...fixtureTeam, channels: {} } as unknown as TeamConfig, cwd);
+      expect(plan.deletes).toContain(join(cwd, rel));
+    } finally {
+      rmSync(join(cwd, rel), { force: true });
+    }
   });
 
   it("is idempotent: same inputs → identical writes + deletes", () => {

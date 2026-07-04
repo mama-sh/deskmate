@@ -100,11 +100,6 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
   out("agent/channels/deskmate-avatars.ts", renderAvatarsChannel());
   out(".env.example", renderEnvExample(team));
 
-  // Phase-2 scheduled sweep — only when at least one channel opts into digest.
-  if (Object.values(team.channels).some((r) => r.watch?.digest === true)) {
-    out("agent/schedules/deskmate-sweep.ts", renderDeskmateSweepSchedule(team));
-  }
-
   // ── Per-deskmate subagent tree ──────────────────────────────────────────────
   // OUTPUT paths are keyed by the deskmate `id` (agent/subagents/<id>/…); AUTHORED
   // SOURCE paths are keyed by `d.role`, so a deskmate whose id differs from its role
@@ -172,6 +167,27 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
   const deletes: string[] = [];
   for (const existing of subdirs(join(cwd, "agent", "subagents"))) {
     if (!team.deskmates[existing]) deletes.push(join(cwd, "agent", "subagents", existing));
+  }
+
+  // ── Phase-2 scheduled sweep ─────────────────────────────────────────────────
+  // Runs only for channels with BOTH watch.digest AND watch.post: a sweep session has
+  // no thread, so any non-silent output is a top-level post — which post: false forbids
+  // (warn on digest-without-post). sync OWNS agent/**, so when nothing qualifies we must
+  // DELETE any previously generated sweep file, else a stale schedule keeps firing.
+  const digestChannels = Object.entries(team.channels).filter(([, r]) => r.watch?.digest === true);
+  for (const [ch, r] of digestChannels) {
+    if (r.watch?.post !== true) {
+      warnings.push(
+        `channel "${ch}": watch.digest needs watch.post: true to run — a scheduled sweep can only ` +
+          `post top-level, so with post: false it is skipped.`,
+      );
+    }
+  }
+  const sweepPath = join(cwd, "agent", "schedules", "deskmate-sweep.ts");
+  if (digestChannels.some(([, r]) => r.watch?.post === true)) {
+    out("agent/schedules/deskmate-sweep.ts", renderDeskmateSweepSchedule(team));
+  } else if (existsSync(sweepPath)) {
+    deletes.push(sweepPath);
   }
 
   return { writes, deletes, warnings };

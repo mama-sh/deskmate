@@ -312,12 +312,12 @@ channels: {
       reply: true,        // answer in-thread when it can help (default true)
       post: false,        // top-level posts — the loudest gesture (default false)
       picker: "routed",   // "routed" = the channel's deskmate; "frontdesk" = pick by domain
-      // digest: true,    // also include this channel in the daily scheduled sweep
+      // digest: true,    // include in the daily sweep — needs post: true to actually post
     },
   },
 },
 
-// Team-level sweep cadence (one static cron; only used if a channel sets digest: true).
+// Team-level sweep cadence (one static cron; only used when a channel sets digest: true AND post: true).
 sweep: { cron: "0 9 * * 1-5" },
 ```
 
@@ -329,13 +329,14 @@ sweep: { cron: "0 9 * * 1-5" },
 | `approvePosts` | `false` | HITL approve/reject before a post — **config field only, not yet wired** (see below) |
 | `picker` | `"routed"` | `"routed"` uses the channel's mapped deskmate; `"frontdesk"` picks by domain |
 | `reactionPalette` | curated set | Allowed reaction emoji names; the model can only use these. Default: `eyes`, `white_check_mark`, `tada`, `warning`, `+1` |
-| `digest` | `false` | Include this channel in the scheduled sweep (`sweep.cron`, default `0 9 * * 1-5`) |
+| `digest` | `false` | Include this channel in the scheduled sweep (`sweep.cron`, default `0 9 * * 1-5`). Requires `post: true` — a digest can only post top-level |
 
-`digest: true` on any channel makes `deskmate sync` generate
-`agent/schedules/deskmate-sweep.ts`, a single team-level cron that reviews each
-digest channel and posts/reacts only if something warrants it. A `digest` channel
-only posts a scheduled top-level update when `post: true`; with `post: false` the
-sweep may only react or reply in-thread, never open a new top-level message.
+A channel with **both** `digest: true` and `post: true` makes `deskmate sync` generate
+`agent/schedules/deskmate-sweep.ts`, a single team-level cron that reviews each such
+channel and posts a short digest only if something warrants it. `digest` requires
+`post: true`: a sweep session has no thread to reply into, so any non-silent output is a
+new top-level post — exactly what `post: false` forbids. A `digest: true` channel with
+`post: false` is therefore skipped, and `deskmate sync` prints a warning.
 
 > **Known follow-up:** `approvePosts` (a human approve/reject gate before a top-level
 > post) is accepted in config but its enforcement is **not yet wired**. Because `post`

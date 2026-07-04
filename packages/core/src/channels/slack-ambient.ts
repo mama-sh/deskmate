@@ -39,7 +39,11 @@ async function resolveBotToken(): Promise<string> {
   return typeof t === "function" ? String(await (t as () => Promise<string>)()) : String(t);
 }
 
-async function slackApi(method: string, params: Record<string, unknown>): Promise<any> {
+async function slackApi(
+  method: string,
+  params: Record<string, unknown>,
+  opts?: { ignoreErrors?: string[] },
+): Promise<any> {
   // Slack Web API read methods (auth.test, conversations.replies) parse
   // form/query params, NOT JSON bodies — a JSON body silently drops the args
   // and Slack answers `invalid_arguments`. Form-encode like the official SDK.
@@ -56,7 +60,8 @@ async function slackApi(method: string, params: Record<string, unknown>): Promis
     body: form.toString(),
   });
   const json = (await res.json()) as any;
-  if (!json?.ok) log(`slack ${method} error:`, json?.error);
+  // Skip logging errors the caller expects and treats as a no-op (e.g. already_reacted).
+  if (!json?.ok && !opts?.ignoreErrors?.includes(json?.error)) log(`slack ${method} error:`, json?.error);
   return json;
 }
 
@@ -68,10 +73,10 @@ async function getBotUserId(): Promise<string | null> {
   return botUserIdCache;
 }
 
-/** Add ONE emoji reaction to a message. `already_reacted` is a no-op, not an error. */
+/** Add ONE emoji reaction to a message. `already_reacted` is a no-op, not an error
+ *  (slackApi is told to ignore it, so it isn't logged as an error either). */
 async function addReaction(channelId: string, ts: string, name: string): Promise<void> {
-  const r = await slackApi("reactions.add", { channel: channelId, timestamp: ts, name });
-  if (!r?.ok && r?.error !== "already_reacted") log(`reactions.add ${name} error:`, r?.error);
+  await slackApi("reactions.add", { channel: channelId, timestamp: ts, name }, { ignoreErrors: ["already_reacted"] });
 }
 
 /**

@@ -4,19 +4,24 @@ import type { Roster } from "../roster.js";
 
 export const DEFAULT_SWEEP_CRON = "0 9 * * 1-5";
 
-export type SweepTarget = { channelId: string; deskmate: string; post: boolean };
+export type SweepTarget = { channelId: string; deskmate: string };
 
-/** Channels opted into the scheduled sweep (watch.digest === true). */
+/**
+ * Channels the scheduled sweep runs for: watch.digest AND watch.post both enabled.
+ * A sweep session has no thread, so any non-silent output lands as a top-level post —
+ * which watch.post: false forbids. A digest channel with post: false is therefore
+ * skipped (and `deskmate sync` warns). See the README "Proactive watching" section.
+ */
 export function sweepTargets(routes: Record<string, ChannelRoute>): SweepTarget[] {
   return Object.entries(routes)
-    .filter(([, r]) => r.watch?.digest === true)
-    .map(([channelId, r]) => ({ channelId, deskmate: r.deskmate, post: r.watch?.post === true }));
+    .filter(([, r]) => r.watch?.digest === true && r.watch?.post === true)
+    .map(([channelId, r]) => ({ channelId, deskmate: r.deskmate }));
 }
 
 /**
- * Build the scheduled sweep: on the team-level cron, for each digest-enabled channel
- * start a proactive session that reviews recent activity and posts/reacts only if
- * warranted. `slack` is the managed Slack channel (passed opaque to avoid a type dep);
+ * Build the scheduled sweep: on the team-level cron, for each channel that opted into
+ * digest + post, start a proactive session that reviews recent activity and posts a
+ * digest only if warranted. `slack` is the managed Slack channel (passed opaque to avoid a type dep);
  * the front desk routes to the channel's deskmate via the directive in the message.
  */
 export function createDeskmateSweep(
@@ -30,14 +35,12 @@ export function createDeskmateSweep(
     async run({ receive, waitUntil, appAuth }) {
       for (const t of targets) {
         const name = roster[t.deskmate]?.displayName ?? t.deskmate;
-        const action = t.post
-          ? "Post a short update, reply in-thread, or react — but only if something genuinely warrants it; otherwise finish silently."
-          : "Reply in-thread or react if something genuinely warrants it. Do NOT create a new top-level post. Otherwise finish silently.";
         waitUntil(
           receive(opts.slack as any, {
             message:
               `[routing] Delegate to the \`${t.deskmate}\` deskmate (${name}).\n\n` +
-              `[proactive:sweep] Review recent activity in this channel. ${action}`,
+              `[proactive:sweep] Review recent activity in this channel. Post a short digest ` +
+              `only if something genuinely warrants it; otherwise finish silently.`,
             target: { channelId: t.channelId },
             auth: appAuth,
           }),
