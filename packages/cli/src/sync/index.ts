@@ -33,7 +33,9 @@ export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
     );
   }
   if (!mod.default || typeof mod.default !== "object") {
-    throw new Error(`${CONFIG_FILE} must \`export default defineTeam({ … })\`.`);
+    throw new Error(
+      `${CONFIG_FILE} must \`export default\` a team config object (optionally wrapped in \`defineTeam({ … })\`).`,
+    );
   }
 
   // Validate + normalize through defineTeam whether or not the consumer already

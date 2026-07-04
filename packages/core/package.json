@@ -14,6 +14,7 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').copyFileSync('src/front-desk-instructions.md','dist/front-desk-instructions.md')\"",
+    "prepack": "pnpm -w run build:packages",
     "typecheck": "tsc",
     "test": "vitest run --passWithNoTests"
   },
