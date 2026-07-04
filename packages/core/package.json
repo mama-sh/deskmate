@@ -9,7 +9,11 @@
     "./channels/eve": { "types": "./dist/channels/eve.d.ts", "default": "./dist/channels/eve.js" },
     "./channels/deskmate-avatars": { "types": "./dist/channels/deskmate-avatars.d.ts", "default": "./dist/channels/deskmate-avatars.js" },
     "./deskmate-says": { "types": "./dist/deskmate-says.d.ts", "default": "./dist/deskmate-says.js" },
-    "./front-desk-instructions": { "types": "./dist/front-desk-instructions.d.ts", "default": "./dist/front-desk-instructions.js" }
+    "./front-desk-instructions": { "types": "./dist/front-desk-instructions.d.ts", "default": "./dist/front-desk-instructions.js" },
+    "./house-style": {
+      "types": "./dist/house-style.d.ts",
+      "default": "./dist/house-style.js"
+    }
   },
   "files": ["dist"],
   "repository": {
@@ -21,7 +25,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').copyFileSync('src/front-desk-instructions.md','dist/front-desk-instructions.md')\"",
+    "build": "tsc -p tsconfig.build.json && node -e \"const fs=require('node:fs'); for (const f of ['front-desk-instructions.md','house-style.md']) fs.copyFileSync('src/'+f,'dist/'+f)\"",
     "prepack": "pnpm -w run build:packages",
     "typecheck": "tsc",
     "test": "vitest run --passWithNoTests"
