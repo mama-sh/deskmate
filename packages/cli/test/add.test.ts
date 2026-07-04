@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { defineTeam } from "@deskmate/core";
-import { add } from "../src/add.js";
+import { add, entryFromRole } from "../src/add.js";
 
 // `add` copies a catalog role into roles/<id>/, appends its roster entry, AND (the
 // fix under test) seeds a matching `connections.<provider>` for every provider the
@@ -42,6 +42,30 @@ function loadTeam(configSrc: string): unknown {
   return new Function(`return (${objectLiteral});`)();
 }
 
+describe("entryFromRole", () => {
+  it("carries an optional voice from the role manifest into the config entry", () => {
+    const entry = entryFromRole({
+      id: "devops",
+      displayName: "DevOps Engineer",
+      emoji: ":wrench:",
+      summary: "Triages incidents.",
+      voice: "Terse SRE. Dry, not chatty.",
+      providers: ["sentry"],
+    });
+    expect(entry.voice).toBe("Terse SRE. Dry, not chatty.");
+  });
+
+  it("omits voice when the manifest has none", () => {
+    const entry = entryFromRole({
+      id: "devops",
+      displayName: "DevOps Engineer",
+      emoji: ":wrench:",
+      summary: "Triages incidents.",
+    });
+    expect("voice" in entry).toBe(false);
+  });
+});
+
 describe("deskmate add — seeds matching connections", () => {
   it("writes BOTH the deskmate entry and its connections entry, and passes defineTeam", () => {
     add(["product_analyst"], cwd);
@@ -50,6 +74,8 @@ describe("deskmate add — seeds matching connections", () => {
     // The roster entry (reads mixpanel) …
     expect(src).toContain("product_analyst: {");
     expect(src).toContain('reads: ["mixpanel"]');
+    // … carries the catalog role's voice line …
+    expect(src).toContain("voice:");
     // … and the seeded connection with a default env prefix.
     expect(src).toContain("mixpanel: {");
     expect(src).toContain('kind: "mcp"');

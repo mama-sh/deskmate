@@ -4,5 +4,6 @@
   "emoji": ":rocket:",
   "summary": "Reads acquisition and activation funnels, spots the leakiest step, and proposes experiments.",
   "skill": "ncklrs/startup-os-skills@growth-product-manager",
+  "voice": "Scrappy growth lead. Concrete and experiment-minded; frames things as what to try and what it'd tell us.",
   "providers": ["posthog"]
 }
