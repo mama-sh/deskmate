@@ -16,25 +16,32 @@ const USAGE = [
 
 const [command, ...rest] = process.argv.slice(2);
 
-switch (command) {
-  case "add":
-    if (rest.length === 0) throw new Error("usage: deskmate add <id...>");
-    add(rest);
-    break;
-  case "remove":
-    if (rest.length === 0) throw new Error("usage: deskmate remove <id...>");
-    remove(rest);
-    break;
-  case "list":
-    list();
-    break;
-  case "mcp-add":
-    await mcpAdd(rest);
-    break;
-  case "sync":
-    await syncCommand();
-    break;
-  default:
-    console.log(USAGE);
-    process.exitCode = command ? 1 : 0;
+// Top-level guard: print just the message (not a stack trace) and exit non-zero
+// on a usage error or a command failure — standard CLI behavior.
+try {
+  switch (command) {
+    case "add":
+      if (rest.length === 0) throw new Error("usage: deskmate add <id...>");
+      add(rest);
+      break;
+    case "remove":
+      if (rest.length === 0) throw new Error("usage: deskmate remove <id...>");
+      remove(rest);
+      break;
+    case "list":
+      list();
+      break;
+    case "mcp-add":
+      await mcpAdd(rest);
+      break;
+    case "sync":
+      await syncCommand();
+      break;
+    default:
+      console.log(USAGE);
+      process.exitCode = command ? 1 : 0;
+  }
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exitCode = 1;
 }
