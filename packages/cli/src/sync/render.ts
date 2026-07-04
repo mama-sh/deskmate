@@ -148,7 +148,8 @@ export function renderDeskmateSaysTool(): string {
 /**
  * `agent/instructions.md` — the front-desk router prose, from core's template.
  * Markdown gets an HTML-comment banner (a `//` line would render as body text).
- * NOTE: subagent instructions are copied VERBATIM (no banner) — see plan.ts.
+ * NOTE: subagent instructions are NOT this — they're composed (no banner) by
+ * `renderSubagentInstructions` from the role file + core's house style. See plan.ts.
  */
 export function renderFrontDeskInstructions(): string {
   const { frontDeskInstructions } = require("@deskmate/core/front-desk-instructions") as {

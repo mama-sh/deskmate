@@ -171,6 +171,8 @@ export default defineTeam({
   // The roster. Each entry's `role` names the authored roles/<id>/ directory;
   // `reads` lists the connections that deskmate may query. Identity (emoji /
   // displayName / summary) lives here so the whole team reads at a glance.
+  // `voice` (optional) is one line of persona/register, layered under the shared
+  // house style so each deskmate sounds like a distinct coworker, not an AI.
   deskmates: {
     product_analyst: {
       role: "product_analyst",
@@ -178,6 +180,7 @@ export default defineTeam({
       displayName: "Product Analyst",
       summary: "Turns product usage data into a short narrative: what changed, why, what to look at next.",
       skill: "ncklrs/startup-os-skills@product-analyst",
+      voice: "Calm analyst. States what moved and the number behind it, then what to look at next. No hype.",
       reads: ["mixpanel"],
     },
     devops: {
@@ -186,6 +189,7 @@ export default defineTeam({
       displayName: "DevOps Engineer",
       summary: "Triages errors and incidents from logs/monitoring, explains likely causes, and proposes (never auto-applies) fixes.",
       skill: "erichowens/some_claude_skills@logging-observability",
+      voice: "Terse SRE. Leads with the punchline, shows the query he ran, flags risk plainly. Dry, not chatty.",
       reads: ["sentry"],
     },
   },
@@ -223,8 +227,9 @@ To customize a deskmate, edit its **authored** files after `deskmate add`, then 
 
 ```
 roles/<id>/
-  deskmate.json     # { id, displayName, emoji, summary, skill, providers }
-  instructions.md   # the role + how it works — copied into agent/ VERBATIM
+  deskmate.json     # { id, displayName, emoji, summary, skill, voice, providers }
+  instructions.md   # the role + how it works — sync composes it with the shared
+                    #   house-style block (voice + grounding) into agent/
   tools/*.ts        # read tools: a pure, tested function + a thin defineTool wrapper
   connections/*.ts  # read-only MCP (defineMcpClientConnection, tools.allow)
   skills/*/SKILL.md # optional load-on-demand playbooks
