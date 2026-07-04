@@ -8,7 +8,7 @@ import {
 const EMPTY_CONFIG = `import { defineTeam } from "@deskmate/core";
 
 export default defineTeam({
-  model: "anthropic/claude-sonnet-4.6",
+  model: "anthropic/claude-sonnet-5",
   connections: {},
   deskmates: {},
   channels: {},
@@ -48,7 +48,7 @@ describe("appendDeskmateEntry", () => {
   it("preserves the rest of the source (other top-level keys untouched)", () => {
     const out = appendDeskmateEntry(EMPTY_CONFIG, "product_analyst", PA);
     expect(out).toContain('import { defineTeam } from "@deskmate/core";');
-    expect(out).toContain('model: "anthropic/claude-sonnet-4.6"');
+    expect(out).toContain('model: "anthropic/claude-sonnet-5"');
     expect(out).toContain("connections: {}");
     expect(out).toContain("channels: {}");
     // brace balance is preserved

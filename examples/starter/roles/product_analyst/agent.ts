@@ -7,5 +7,5 @@ export default defineAgent({
     "funnels, activation, retention.",
   // Each deskmate can run its own model. Defaults to the front desk's model;
   // change this line for a cheaper or stronger model per deskmate.
-  model: "anthropic/claude-sonnet-4.6",
+  model: "anthropic/claude-sonnet-5",
 });

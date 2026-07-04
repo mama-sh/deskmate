@@ -9,7 +9,7 @@ import { defineTeam } from "@deskmate/core";
 export default defineTeam({
   // Default model for the front desk and any deskmate that doesn't override it.
   // Models resolve through the Vercel AI Gateway.
-  model: "anthropic/claude-sonnet-4.6",
+  model: "anthropic/claude-sonnet-5",
 
   // External data each deskmate can read. `kind: "mcp"` connections map to an
   // <ENV>_MCP_URL / <ENV>_MCP_TOKEN pair (see the generated .env.example).
