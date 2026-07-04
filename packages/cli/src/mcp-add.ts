@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { renderMcpConnection } from "./lib/mcp-template.js";
@@ -63,6 +63,14 @@ export async function mcpAdd(args: string[], cwd: string = process.cwd()): Promi
     const tools = toolsRaw.split(",").map((t) => t.trim()).filter(Boolean);
 
     const file = join(cwd, "connections", `${name}.ts`);
+    // Never clobber an existing connection — a consumer may have hand-edited its
+    // auth/URL/tool-allow-list. Skip (and don't touch the config) if it's there.
+    if (existsSync(file)) {
+      console.log(
+        `• ${name}: connections/${name}.ts already exists, skipping (edit it directly, or remove it first)`,
+      );
+      return;
+    }
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, renderMcpConnection({ name, urlEnv, tokenEnv, description, tools }));
     console.log(`✓ created connections/${name}.ts`);

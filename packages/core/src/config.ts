@@ -56,6 +56,16 @@ export function defineTeam(input: unknown): TeamConfig {
     }
   }
   for (const [id, d] of Object.entries(team.deskmates)) {
+    // `role` is used as a filesystem path segment by `deskmate sync` (roles/<role>/…
+    // and the generated re-export specifiers), so guard it with the same identifier
+    // rule as ids/connection names — otherwise a value like "../.." could traverse
+    // outside roles/.
+    if (!IDENTIFIER_RE.test(d.role)) {
+      throw new Error(
+        `deskmate "${id}" has role "${d.role}" which must be snake_case (a lowercase letter, then ` +
+          `letters/digits/underscores) — it becomes a directory path segment (roles/<role>/…).`,
+      );
+    }
     for (const r of d.reads) {
       if (!team.connections[r]) throw new Error(`deskmate "${id}" reads unknown connection "${r}"`);
     }

@@ -182,6 +182,11 @@ describe("renderEnvExample", () => {
     const out = renderEnvExample(fixtureTeam);
     expect(out).not.toContain("LEDGER_MCP_URL=");
   });
+
+  it("does NOT seed DESKMATE_MAX_TURNS (it would override frontDesk.maxTurns)", () => {
+    const out = renderEnvExample(fixtureTeam);
+    expect(out).not.toContain("DESKMATE_MAX_TURNS");
+  });
 });
 
 describe("renderStubConnection", () => {

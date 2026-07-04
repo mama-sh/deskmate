@@ -40,6 +40,15 @@ describe("defineTeam", () => {
     ).toThrow(/snake_case/i);
   });
 
+  it("rejects a deskmate `role` that isn't a snake_case identifier (path-traversal guard)", () => {
+    expect(() =>
+      defineTeam({
+        deskmates: { devops: { role: "../evil", emoji: "🔧", displayName: "D", summary: "…", reads: [] } },
+        connections: {},
+      }),
+    ).toThrow(/snake_case/i);
+  });
+
   it("rejects a connection name that isn't a snake_case identifier", () => {
     expect(() =>
       defineTeam({

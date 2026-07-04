@@ -4,11 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc",
-    "test": "vitest run --passWithNoTests",
-    "build:packages": "pnpm -r --filter=\"./packages/*\" build",
-    "typecheck:all": "pnpm -r typecheck",
-    "test:all": "pnpm -r test"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "build:packages": "pnpm -r --filter=\"./packages/*\" build"
   },
   "packageManager": "pnpm@10.28.2",
   "dependencies": {
