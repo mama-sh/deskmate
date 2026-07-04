@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import team from "../deskmate.config.ts";
+import team from "../deskmate.config.js";
 
 // The generated `agent/**` tree is committed. This smoke test is the proof that
 // `deskmate sync` produced a tree that MATCHES `deskmate.config.ts`: for every
