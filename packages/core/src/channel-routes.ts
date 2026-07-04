@@ -5,7 +5,17 @@
 //
 // `lock: true` makes that deskmate the ONLY one reachable in the channel
 // (instruction-enforced — see agent/channels/slack.ts). Omit it for a soft default.
-export type ChannelRoute = { deskmate: string; lock?: boolean };
+export type ChannelWatch = {
+  react?: boolean;                       // Tier-1 emoji reactions (default true)
+  reply?: boolean;                       // Tier-2 thread answers (default true)
+  post?: boolean;                        // Tier-2 top-level posts (default false)
+  approvePosts?: boolean;                // HITL approve/reject before a post (default false)
+  picker?: "routed" | "frontdesk";       // who acts (default "routed")
+  reactionPalette?: string[];            // allowed reaction emoji (curated default otherwise)
+  digest?: boolean;                      // include in the scheduled sweep (Phase 2)
+};
+
+export type ChannelRoute = { deskmate: string; lock?: boolean; watch?: ChannelWatch };
 
 export const CHANNEL_ROUTES: Record<string, ChannelRoute> = {
   // "C0123INCIDENTS": { deskmate: "devops", lock: true },

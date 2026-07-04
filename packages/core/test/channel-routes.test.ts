@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { resolveRoute } from "../src/channel-routes.js";
+import type { ChannelRoute } from "../src/channel-routes.js";
 
 const routes = {
   incidents: { deskmate: "devops", lock: true },
@@ -19,5 +20,15 @@ describe("resolveRoute", () => {
   });
   it("returns null for an unmapped channel", () => {
     expect(resolveRoute({ name: "random", id: "Cxxx" }, routes)).toBeNull();
+  });
+});
+
+describe("ChannelRoute.watch type", () => {
+  it("accepts a route with a watch block", () => {
+    const route: ChannelRoute = {
+      deskmate: "devops",
+      watch: { react: true, reply: true, post: false, picker: "routed" },
+    };
+    expect(route.watch?.picker).toBe("routed");
   });
 });
