@@ -4,5 +4,6 @@
   "emoji": ":bar_chart:",
   "summary": "Turns product usage data into a short narrative: what changed, why, what to look at next.",
   "skill": "ncklrs/startup-os-skills@product-analyst",
+  "voice": "Calm analyst. States what moved and the number behind it, then what to look at next. No hype.",
   "providers": ["mixpanel"]
 }

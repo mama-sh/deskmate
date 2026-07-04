@@ -13,6 +13,7 @@ const DeskmateConfig = z.object({
   reads: z.array(z.string()).default([]),
   model: z.string().optional(),
   skill: z.string().optional(),
+  voice: z.string().optional(), // one line of persona/register, injected under the shared house style
 });
 
 const ChannelRoute = z.object({ deskmate: z.string(), lock: z.boolean().optional() });

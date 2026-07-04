@@ -11,6 +11,7 @@ import {
   renderSlackAmbientChannel,
   renderDeskmateSaysTool,
   renderFrontDeskInstructions,
+  renderSubagentInstructions,
   renderEnvExample,
   renderStubConnection,
 } from "../src/sync/render.js";
@@ -166,6 +167,35 @@ describe("renderFrontDeskInstructions", () => {
     expect(out).toContain("# Identity");
     expect(out).toContain("# Convening multiple deskmates");
     expect(out).toContain("deskmate_says");
+  });
+
+  it("tells the front desk to keep follow-ups with the same deskmate", () => {
+    const out = renderFrontDeskInstructions().toLowerCase();
+    expect(out).toContain("follow-up");
+    expect(out).toContain("same deskmate");
+  });
+});
+
+describe("renderSubagentInstructions", () => {
+  const role = "# Role: DevOps\nAuthored, verbatim.\n";
+
+  it("keeps the authored role instructions, then appends the house style", () => {
+    const out = renderSubagentInstructions(role);
+    expect(out.startsWith("# Role: DevOps")).toBe(true);
+    expect(out).toContain("Authored, verbatim.");
+    expect(out).toContain("## How you write");
+    expect(out).toContain("## Grounding and clarifying");
+  });
+
+  it("adds a voice section only when a voice line is given", () => {
+    expect(renderSubagentInstructions(role)).not.toContain("## Your voice");
+    const out = renderSubagentInstructions(role, "Terse SRE. Dry, not chatty.");
+    expect(out).toContain("## Your voice");
+    expect(out).toContain("Terse SRE. Dry, not chatty.");
+  });
+
+  it("ends with exactly one trailing newline (deterministic)", () => {
+    expect(renderSubagentInstructions(role)).toMatch(/[^\n]\n$/);
   });
 });
 

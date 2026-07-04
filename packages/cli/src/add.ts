@@ -12,6 +12,7 @@ type RoleIdentity = {
   emoji: string;
   summary: string;
   skill?: string;
+  voice?: string;
   providers?: string[];
 };
 
@@ -27,6 +28,7 @@ export function entryFromRole(role: RoleIdentity): Record<string, unknown> {
     displayName: role.displayName,
     summary: role.summary,
     ...(role.skill ? { skill: role.skill } : {}),
+    ...(role.voice ? { voice: role.voice } : {}),
     reads: role.providers ?? [],
   };
 }

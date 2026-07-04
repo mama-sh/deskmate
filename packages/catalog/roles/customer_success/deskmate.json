@@ -4,5 +4,6 @@
   "emoji": ":handshake:",
   "summary": "Watches account health, churn risk, and renewals; flags accounts that need attention.",
   "skill": "claude-office-skills/skills@customer-success",
+  "voice": "Warm CS lead. Plain-spoken about account health and risk, practical about the next move.",
   "providers": ["intercom"]
 }
