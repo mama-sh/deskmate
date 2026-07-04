@@ -9,6 +9,9 @@ import {
   renderEnvExample,
   renderEveChannel,
   renderFrontDeskInstructions,
+  renderMemoryInstructions,
+  renderMemoryReflectionSchedule,
+  renderMemoryTool,
   renderReexport,
   renderRootAgent,
   renderRosterRegistry,
@@ -161,6 +164,22 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
     for (const rel of walkFiles(skillsRoot)) {
       out(`agent/subagents/${id}/skills/${rel}`, readFileSync(join(skillsRoot, rel)));
     }
+
+    // Cross-thread memory shims — ONLY for a deskmate that opts into `memory`
+    // (d.memory is undefined when off, so a non-memory deskmate emits none of these).
+    // Three tool shims + a dynamic-recall instructions entry that COEXISTS with the
+    // composed root instructions.md above (eve reads instructions/* beside it). All
+    // logic lives in @deskmate/core/memory; the shims just bind it to this id.
+    //
+    // NOTE: d.memory.maxItems is intentionally NOT read here — it is not yet plumbed to
+    // the store (adapters use a global 200-row cap). Only coreLimit is wired, via the
+    // instructions shim below. (Tracked as a follow-up; do not plumb maxItems here.)
+    if (d.memory) {
+      for (const tool of ["remember", "recall", "forget"] as const) {
+        out(`agent/subagents/${id}/tools/${tool}.ts`, renderMemoryTool(id, tool));
+      }
+      out(`agent/subagents/${id}/instructions/memory.ts`, renderMemoryInstructions(id, d.memory.coreLimit));
+    }
   }
 
   // ── Deletes: generated subagent dirs for deskmates no longer in the config ──
@@ -188,6 +207,22 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
     out("agent/schedules/deskmate-sweep.ts", renderDeskmateSweepSchedule(team));
   } else if (existsSync(sweepPath)) {
     deletes.push(sweepPath);
+  }
+
+  // ── Deployment-root memory reflection ("dreaming") schedule ─────────────────
+  // Root-only (schedules can't live under a subagent). Emitted ONCE iff ≥1 deskmate
+  // opts into memory, wiring every memory-enabled id + the team's reflect cron. ids
+  // stay in config order (like the roster) — deterministic given the same config. As
+  // with the sweep, sync OWNS agent/**, so when no deskmate has memory we DELETE any
+  // previously generated file, else a stale schedule keeps firing.
+  const memoryIds = Object.entries(team.deskmates)
+    .filter(([, d]) => d.memory)
+    .map(([id]) => id);
+  const reflectPath = join(cwd, "agent", "schedules", "memory-reflection.ts");
+  if (memoryIds.length > 0) {
+    out("agent/schedules/memory-reflection.ts", renderMemoryReflectionSchedule(memoryIds, team.memory?.reflect?.cron));
+  } else if (existsSync(reflectPath)) {
+    deletes.push(reflectPath);
   }
 
   return { writes, deletes, warnings };

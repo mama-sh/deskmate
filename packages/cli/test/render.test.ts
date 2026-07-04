@@ -15,6 +15,9 @@ import {
   renderEnvExample,
   renderStubConnection,
   renderDeskmateSweepSchedule,
+  renderMemoryTool,
+  renderMemoryInstructions,
+  renderMemoryReflectionSchedule,
 } from "../src/sync/render.js";
 
 // A minimal, hand-built TeamConfig fixture (two deskmates, two mcp connections).
@@ -246,6 +249,50 @@ describe("renderDeskmateSweepSchedule", () => {
   it("falls back to the default cron when sweep is omitted", () => {
     const out = renderDeskmateSweepSchedule(fixtureTeam);
     expect(out).toContain('"0 9 * * 1-5"');
+  });
+});
+
+describe("renderMemoryTool", () => {
+  it("re-exports one tool off createMemoryTools(id), bound to the deskmate id", () => {
+    for (const tool of ["remember", "recall", "forget"] as const) {
+      const out = renderMemoryTool("devops", tool);
+      expect(out.startsWith(BANNER)).toBe(true);
+      expect(out).toContain('import { createMemoryTools } from "@deskmate/core/memory";');
+      expect(out).toContain(`export default createMemoryTools("devops").${tool};`);
+    }
+  });
+
+  it("ends with exactly one trailing newline (deterministic)", () => {
+    expect(renderMemoryTool("devops", "remember")).toMatch(/[^\n]\n$/);
+  });
+});
+
+describe("renderMemoryInstructions", () => {
+  it("wires createMemoryInstructions(id, coreLimit) with the numeric coreLimit", () => {
+    const out = renderMemoryInstructions("devops", 12);
+    expect(out.startsWith(BANNER)).toBe(true);
+    expect(out).toContain('import { createMemoryInstructions } from "@deskmate/core/memory";');
+    expect(out).toContain('export default createMemoryInstructions("devops", 12);');
+  });
+});
+
+describe("renderMemoryReflectionSchedule", () => {
+  it("wires createMemoryReflection with the ids, an awaited store, and the imported default cron", () => {
+    const out = renderMemoryReflectionSchedule(["devops", "product_analyst"]);
+    expect(out.startsWith(BANNER)).toBe(true);
+    expect(out).toContain(
+      'import { createMemoryReflection, resolveMemoryStore, DEFAULT_MEMORY_REFLECT_CRON } from "@deskmate/core/memory";',
+    );
+    expect(out).toContain(
+      'createMemoryReflection(["devops","product_analyst"], await resolveMemoryStore(), { cron: DEFAULT_MEMORY_REFLECT_CRON });',
+    );
+  });
+
+  it("emits an overriding cron as a JSON string and does not import the unused default", () => {
+    const out = renderMemoryReflectionSchedule(["devops"], "30 2 * * *");
+    expect(out).toContain('import { createMemoryReflection, resolveMemoryStore } from "@deskmate/core/memory";');
+    expect(out).not.toContain("DEFAULT_MEMORY_REFLECT_CRON");
+    expect(out).toContain('createMemoryReflection(["devops"], await resolveMemoryStore(), { cron: "30 2 * * *" });');
   });
 });
 
