@@ -49,12 +49,13 @@ function makeDeps(overrides: Partial<DevDeps> = {}) {
 
 describe("dev", () => {
   it("syncs once, then spawns `eve dev` with passthrough args, then exits with eve's code", async () => {
-    const { deps, calls, emitExit } = makeDeps();
+    const { deps, calls, closeWatch, emitExit } = makeDeps();
     const p = dev(["--no-ui"], "/proj", deps);
     await Promise.resolve();
     emitExit(0);
     await expect(p).resolves.toBe(0);
     expect(calls).toEqual(["sync", "spawn:dev --no-ui"]); // sync BEFORE spawn
+    expect(closeWatch).toHaveBeenCalled(); // watcher torn down on exit
   });
 
   it("re-syncs quietly on a config change without killing eve", async () => {

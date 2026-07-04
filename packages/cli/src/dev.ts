@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { watch as fsWatch } from "node:fs";
+import { watch as fsWatch, existsSync } from "node:fs";
 import { join } from "node:path";
 import { syncCommand, CONFIG_FILE } from "./sync/index.js";
 import { resolveEveBin } from "./lib/eve-bin.js";
@@ -86,10 +86,13 @@ function watchConfigDefault(cwd: string, onChange: () => void): { close: () => v
     if (timer) clearTimeout(timer);
     timer = setTimeout(onChange, 150);
   };
-  const watchers = [
-    fsWatch(join(cwd, CONFIG_FILE), debounced),
-    fsWatch(join(cwd, "roles"), { recursive: true }, debounced),
-  ];
+  // `sync` tolerates a config-only project (deskmates declared but no authored
+  // `roles/` on disk — it writes TODO placeholders), so `dev` must too. Watching a
+  // nonexistent `roles/` would throw ENOENT synchronously and orphan the spawned eve.
+  const watchers = [fsWatch(join(cwd, CONFIG_FILE), debounced)];
+  if (existsSync(join(cwd, "roles"))) {
+    watchers.push(fsWatch(join(cwd, "roles"), { recursive: true }, debounced));
+  }
   return {
     close: () => {
       if (timer) clearTimeout(timer);
