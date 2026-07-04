@@ -26,10 +26,23 @@ function findObjectSpan(source: string, containerKey: string): { open: number; c
   return null;
 }
 
-/** True when `entryKey` is already a top-level key of the given object region. */
+/**
+ * True when `entryKey` appears as a TOP-LEVEL key of the object region `inner`
+ * (brace depth 0 from the start of `inner`). A NESTED field of the same name does
+ * NOT count — otherwise inserting a new top-level entry whose name collides with a
+ * nested field (e.g. adding `connections.env` when a connection already has an
+ * `env: "…"` field) would be wrongly skipped as "already present", leaving the
+ * config unwired. Mirrors the depth scan in `removeObjectEntry`.
+ */
 function hasKey(inner: string, entryKey: string): boolean {
-  const keyRe = new RegExp(`(^|[{,\\n])\\s*["']?${escapeRegExp(entryKey)}["']?\\s*:`, "m");
-  return keyRe.test(inner);
+  const keyRe = new RegExp(`(^|[{,\\n])\\s*["']?${escapeRegExp(entryKey)}["']?\\s*:`, "gm");
+  let m: RegExpExecArray | null;
+  while ((m = keyRe.exec(inner))) {
+    const before = inner.slice(0, m.index);
+    const depth = (before.match(/\{/g)?.length ?? 0) - (before.match(/\}/g)?.length ?? 0);
+    if (depth === 0) return true; // top-level key of the container
+  }
+  return false;
 }
 
 /** Leading whitespace of the source line that `index` sits on. */

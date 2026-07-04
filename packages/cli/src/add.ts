@@ -2,6 +2,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node
 import { dirname, join } from "node:path";
 import { resolveCatalogRoot } from "./catalog.js";
 import { appendConnectionEntry, appendDeskmateEntry, renderEntry } from "./config-file.js";
+import { isValidId } from "./lib/ids.js";
 
 export const CONFIG_FILE = "deskmate.config.ts";
 
@@ -69,6 +70,15 @@ export function editConfig(
 export function add(ids: string[], cwd: string = process.cwd()): void {
   const catalog = resolveCatalogRoot();
   for (const id of ids) {
+    // Guard BEFORE any fs op: `id` is joined onto `roles/` and `cpSync`'d, so reject a
+    // traversal/invalid id up front (also keeps ids consistent with `defineTeam`).
+    if (!isValidId(id)) {
+      console.error(
+        `✗ ${id}: invalid id — must be snake_case (a lowercase letter, then letters/digits/underscores).`,
+      );
+      process.exitCode = 1;
+      continue;
+    }
     const src = join(catalog, "roles", id);
     if (!existsSync(join(src, "deskmate.json"))) {
       console.error(`✗ ${id}: not in the catalog. Run \`deskmate list\`.`);

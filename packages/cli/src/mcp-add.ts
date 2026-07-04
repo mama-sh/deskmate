@@ -4,6 +4,7 @@ import { createInterface } from "node:readline/promises";
 import { renderMcpConnection } from "./lib/mcp-template.js";
 import { appendConnectionEntry, renderEntry } from "./config-file.js";
 import { CONFIG_FILE, editConfig } from "./add.js";
+import { isValidId } from "./lib/ids.js";
 
 /**
  * Run `fn` with an `ask(question, fallback)` helper. Buffers stdin lines so it
@@ -51,7 +52,7 @@ async function withPrompts<T>(
 export async function mcpAdd(args: string[], cwd: string = process.cwd()): Promise<void> {
   const name = args[0];
   if (!name) throw new Error("usage: deskmate mcp-add <name>");
-  if (!/^[a-z][a-z0-9_]*$/.test(name)) {
+  if (!isValidId(name)) {
     throw new Error("<name> must be a snake_case identifier (lowercase letter, then letters/digits/underscores).");
   }
   const upper = name.toUpperCase().replace(/[^A-Z0-9]/g, "_");

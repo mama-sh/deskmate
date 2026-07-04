@@ -2,6 +2,7 @@ import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { removeDeskmateEntry } from "./config-file.js";
 import { CONFIG_FILE, editConfig } from "./add.js";
+import { isValidId } from "./lib/ids.js";
 
 /**
  * `deskmate remove <id...>`: delete `./roles/<id>` and drop its `deskmates.<id>`
@@ -9,6 +10,15 @@ import { CONFIG_FILE, editConfig } from "./add.js";
  */
 export function remove(ids: string[], cwd: string = process.cwd()): void {
   for (const id of ids) {
+    // Guard BEFORE any fs op: `id` is joined onto `roles/` and then `rmSync`'d, so a
+    // value like "../foo" would delete a directory OUTSIDE roles/. Reject it up front.
+    if (!isValidId(id)) {
+      console.error(
+        `✗ ${id}: invalid id — must be snake_case (a lowercase letter, then letters/digits/underscores).`,
+      );
+      process.exitCode = 1;
+      continue;
+    }
     const dest = join(cwd, "roles", id);
     if (existsSync(dest)) {
       rmSync(dest, { recursive: true, force: true });

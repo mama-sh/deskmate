@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { appendDeskmateEntry, removeDeskmateEntry } from "../src/config-file.js";
+import {
+  appendConnectionEntry,
+  appendDeskmateEntry,
+  removeDeskmateEntry,
+} from "../src/config-file.js";
 
 const EMPTY_CONFIG = `import { defineTeam } from "@deskmate/core";
 
@@ -68,6 +72,38 @@ describe("appendDeskmateEntry", () => {
 
   it("throws when there is no deskmates object to insert into", () => {
     expect(() => appendDeskmateEntry(`export default {};\n`, "x", PA)).toThrow();
+  });
+});
+
+describe("appendConnectionEntry — depth-aware key detection", () => {
+  // A connection whose NESTED field is named `env` — inserting a top-level `env`
+  // connection must not be fooled into a no-op by that nested field.
+  const CONFIG_NESTED_ENV = `import { defineTeam } from "@deskmate/core";
+
+export default defineTeam({
+  connections: {
+    mixpanel: { kind: "mcp", env: "MIXPANEL" },
+  },
+  deskmates: {},
+  channels: {},
+});
+`;
+
+  it("inserts a real top-level `env` connection despite a nested field named `env`", () => {
+    const out = appendConnectionEntry(CONFIG_NESTED_ENV, "env", { kind: "mcp", env: "ENV" });
+    // NOT wrongly skipped as already-present:
+    expect(out).not.toBe(CONFIG_NESTED_ENV);
+    // A real top-level `env: { … }` entry was inserted, alongside mixpanel:
+    expect(out).toContain("env: {");
+    expect(out).toContain("mixpanel: {");
+    expect(out).toContain('env: "ENV"');
+    // brace balance preserved
+    expect((out.match(/\{/g) ?? []).length).toBe((out.match(/\}/g) ?? []).length);
+  });
+
+  it("is still a no-op for a genuine top-level duplicate connection", () => {
+    const out = appendConnectionEntry(CONFIG_NESTED_ENV, "mixpanel", { kind: "mcp", env: "MIXPANEL" });
+    expect(out).toBe(CONFIG_NESTED_ENV);
   });
 });
 
