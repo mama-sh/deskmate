@@ -6,6 +6,8 @@ import { planSync } from "./plan.js";
 
 export const CONFIG_FILE = "deskmate.config.ts";
 
+let importSeq = 0;
+
 /**
  * `deskmate sync`: read the consumer's `deskmate.config.ts` and (re)generate the
  * entire `agent/**` tree Eve discovers at build time. `sync` OWNS `agent/**` — it
@@ -27,7 +29,13 @@ export async function syncCommand(
 
   let mod: { default?: unknown };
   try {
-    mod = (await import(pathToFileURL(configPath).href)) as { default?: unknown };
+    // `deskmate dev` re-syncs in one long-lived process; ESM caches modules by URL,
+    // so re-importing the same config path returns the stale original. A unique query
+    // string forces re-evaluation so config edits live-reload. (Registry grows by one
+    // module per re-sync — negligible for a dev session.)
+    mod = (await import(pathToFileURL(configPath).href + `?reload=${++importSeq}`)) as {
+      default?: unknown;
+    };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     throw new Error(

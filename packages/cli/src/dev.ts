@@ -86,10 +86,17 @@ function watchConfigDefault(cwd: string, onChange: () => void): { close: () => v
     if (timer) clearTimeout(timer);
     timer = setTimeout(onChange, 150);
   };
+  // Watch the project dir (not the config file inode) so atomic-rename saves
+  // (vim/VS Code safe-write, which replace the inode) still fire. Filter to the
+  // config file so we ignore sync's own writes (.env.example, the agent/ dir entry).
+  const watchers = [
+    fsWatch(cwd, (_event, filename) => {
+      if (filename === CONFIG_FILE) debounced();
+    }),
+  ];
   // `sync` tolerates a config-only project (deskmates declared but no authored
   // `roles/` on disk — it writes TODO placeholders), so `dev` must too. Watching a
   // nonexistent `roles/` would throw ENOENT synchronously and orphan the spawned eve.
-  const watchers = [fsWatch(join(cwd, CONFIG_FILE), debounced)];
   if (existsSync(join(cwd, "roles"))) {
     watchers.push(fsWatch(join(cwd, "roles"), { recursive: true }, debounced));
   }

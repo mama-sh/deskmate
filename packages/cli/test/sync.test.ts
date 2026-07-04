@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { syncCommand } from "../src/sync/index.js";
@@ -29,6 +29,9 @@ const CONFIG = `export default {
   channels: {},
 };
 `;
+
+/** The CONFIG shape with a swappable model — used to prove config edits live-reload. */
+const configWith = (model: string) => CONFIG.replace(`model: "anthropic/claude-sonnet-5"`, `model: "${model}"`);
 
 let cwd: string;
 
@@ -76,5 +79,28 @@ describe("syncCommand", () => {
     } finally {
       logSpy.mockRestore();
     }
+  });
+
+  // `deskmate dev` re-syncs the SAME config path in one long-lived process. Node's
+  // ESM loader caches modules by URL, so without a cache-bust the second import would
+  // return the stale original and a config edit would never live-reload. This drives
+  // the real `syncCommand` twice against one cwd, editing the model between, and
+  // asserts the regenerated agent.ts tracks the SECOND config.
+  it("re-imports an edited config on re-sync (config edits live-reload)", async () => {
+    cwd = mkdtempSync(join(tmpdir(), "deskmate-sync-"));
+    mkdirSync(join(cwd, "roles/devops"), { recursive: true });
+    writeFileSync(join(cwd, "roles/devops/instructions.md"), "# DevOps\n");
+    const agentTs = join(cwd, "agent", "agent.ts");
+
+    writeFileSync(join(cwd, "deskmate.config.ts"), configWith("anthropic/claude-sonnet-5"));
+    await syncCommand(cwd, { quiet: true });
+    expect(readFileSync(agentTs, "utf8")).toContain("anthropic/claude-sonnet-5");
+
+    // Edit the SAME config path, then re-sync: the regenerated agent must reflect it.
+    writeFileSync(join(cwd, "deskmate.config.ts"), configWith("anthropic/claude-opus-4-8"));
+    await syncCommand(cwd, { quiet: true });
+    const after = readFileSync(agentTs, "utf8");
+    expect(after).toContain("anthropic/claude-opus-4-8");
+    expect(after).not.toContain("anthropic/claude-sonnet-5");
   });
 });
