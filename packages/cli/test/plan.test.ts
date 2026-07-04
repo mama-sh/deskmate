@@ -197,6 +197,19 @@ describe("planSync", () => {
     expect(plan.deletes).not.toContain(join(cwd, "agent/subagents/devops"));
   });
 
+  it("emits the sweep schedule only when a channel opts into digest", () => {
+    const withDigest = {
+      ...fixtureTeam,
+      channels: { C0A: { deskmate: "devops", watch: { digest: true } } },
+    } as unknown as TeamConfig;
+    const plan = planSync(withDigest, cwd);
+    expect(plan.writes.some((w) => w.path.endsWith("agent/schedules/deskmate-sweep.ts"))).toBe(true);
+
+    const noDigest = { ...fixtureTeam, channels: {} } as unknown as TeamConfig;
+    const plan2 = planSync(noDigest, cwd);
+    expect(plan2.writes.some((w) => w.path.endsWith("agent/schedules/deskmate-sweep.ts"))).toBe(false);
+  });
+
   it("is idempotent: same inputs → identical writes + deletes", () => {
     const a = planSync(fixtureTeam, cwd);
     const b = planSync(fixtureTeam, cwd);

@@ -176,6 +176,22 @@ export function renderSubagentInstructions(roleInstructions: string, voice?: str
 }
 
 /**
+ * `agent/schedules/deskmate-sweep.ts` — the Phase-2 scheduled sweep. Emitted only
+ * when a channel opts into `watch.digest` (see plan.ts). One team-level cron.
+ */
+export function renderDeskmateSweepSchedule(team: TeamConfig): string {
+  const cron = team.sweep?.cron ?? "0 9 * * 1-5";
+  return `${BANNER}
+import { createDeskmateSweep } from "@deskmate/core";
+import { DESKMATES } from "../lib/deskmates.js";
+import { CHANNEL_ROUTES } from "../lib/channel-routes.js";
+import slack from "../channels/slack.js";
+
+export default createDeskmateSweep(DESKMATES, CHANNEL_ROUTES, { cron: ${JSON.stringify(cron)}, slack });
+`;
+}
+
+/**
  * A TODO-stub connection, emitted when a deskmate `reads` a connection but no
  * authored file (`roles/<id>/connections/<name>.ts` or shared `connections/<name>.ts`)
  * exists. It is a valid eve connection so `eve build` doesn't crash on a dangling

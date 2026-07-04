@@ -14,6 +14,7 @@ import {
   renderSubagentInstructions,
   renderEnvExample,
   renderStubConnection,
+  renderDeskmateSweepSchedule,
 } from "../src/sync/render.js";
 
 // A minimal, hand-built TeamConfig fixture (two deskmates, two mcp connections).
@@ -230,6 +231,21 @@ describe("renderEnvExample", () => {
   it("does NOT seed DESKMATE_MAX_TURNS (it would override frontDesk.maxTurns)", () => {
     const out = renderEnvExample(fixtureTeam);
     expect(out).not.toContain("DESKMATE_MAX_TURNS");
+  });
+});
+
+describe("renderDeskmateSweepSchedule", () => {
+  it("renders a schedule that calls createDeskmateSweep with the configured cron", () => {
+    const out = renderDeskmateSweepSchedule({ ...fixtureTeam, sweep: { cron: "0 8 * * 1-5" } } as any);
+    expect(out).toContain('import { createDeskmateSweep } from "@deskmate/core";');
+    expect(out).toContain('import { DESKMATES } from "../lib/deskmates.js";');
+    expect(out).toContain('import { CHANNEL_ROUTES } from "../lib/channel-routes.js";');
+    expect(out).toContain('import slack from "../channels/slack.js";');
+    expect(out).toContain('createDeskmateSweep(DESKMATES, CHANNEL_ROUTES, { cron: "0 8 * * 1-5", slack })');
+  });
+  it("falls back to the default cron when sweep is omitted", () => {
+    const out = renderDeskmateSweepSchedule(fixtureTeam);
+    expect(out).toContain('"0 9 * * 1-5"');
   });
 });
 

@@ -5,6 +5,7 @@ import {
   renderAvatarsChannel,
   renderChannelRoutes,
   renderDeskmateSaysTool,
+  renderDeskmateSweepSchedule,
   renderEnvExample,
   renderEveChannel,
   renderFrontDeskInstructions,
@@ -98,6 +99,11 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
   out("agent/channels/eve.ts", renderEveChannel());
   out("agent/channels/deskmate-avatars.ts", renderAvatarsChannel());
   out(".env.example", renderEnvExample(team));
+
+  // Phase-2 scheduled sweep — only when at least one channel opts into digest.
+  if (Object.values(team.channels).some((r) => r.watch?.digest === true)) {
+    out("agent/schedules/deskmate-sweep.ts", renderDeskmateSweepSchedule(team));
+  }
 
   // ── Per-deskmate subagent tree ──────────────────────────────────────────────
   // OUTPUT paths are keyed by the deskmate `id` (agent/subagents/<id>/…); AUTHORED
