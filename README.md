@@ -293,12 +293,13 @@ vercel connect attach <uid> --triggers --trigger-path /eve/v1/slack --yes
 ```
 
 This points Slack events at Deskmate's `/eve/v1/slack` route. Deskmate reads the connector
-UID from `SLACK_CONNECTOR`, which **defaults to `slack/deskmate`** — the `connect` commands
-do **not** set that env var for you. So if your connector's UID is `slack/deskmate` you're
-done; only if you used a different UID do you need to set it and redeploy:
+UID from `SLACK_CONNECTOR`, falling back to `slack/deskmate` when it's unset
+(`process.env.SLACK_CONNECTOR ?? "slack/deskmate"`) — the `connect` commands do **not** set
+that env var for you. So if your connector's UID is `slack/deskmate` you're done; only if
+you used a different UID do you need to set it and redeploy:
 
 ```bash
-vercel env add SLACK_CONNECTOR production   # paste the connector UID from `connect create`
+vercel env add SLACK_CONNECTOR production   # paste the connector UID from `vercel connect create`
 deskmate deploy                             # redeploy so the new env var takes effect
 ```
 
