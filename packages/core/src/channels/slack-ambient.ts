@@ -1,17 +1,22 @@
 import { connectSlackCredentials } from "@vercel/connect/eve";
 import { defineChannel, POST } from "eve/channels";
-import { generateText } from "ai";
 import { createSlackChannel } from "./slack.js";
-import type { ChannelRoute } from "../channel-routes.js";
+import { resolveRoute, resolveWatch, watchDisabled, type ChannelRoute } from "../channel-routes.js";
+import { classifyEvent } from "../watch-gate.js";
+import { withinCooldown } from "./watch-cooldown.js";
 import type { Roster } from "../roster.js";
 
-// ── Ambient thread participation ──────────────────────────────────────────────
-// Reply to thread messages WITHOUT an @mention — but only in threads Deskmate
-// already joined, and only when a lightweight gate decides the message is really
-// for Deskmate. This complements the mention/DM-only managed channel (slack.ts).
+// ── Proactive channel watching ─────────────────────────────────────────────────
+// Watch ALL messages in opted-in channels (no @mention required) and pick a single
+// action per message via the attention gate (watch-gate.ts): ignore / react inline /
+// reply in-thread / post top-level. Opt-in is per channel via `routes[id].watch`
+// (see channel-routes.ts); a channel without a `watch` block is never watched.
+// This complements the mention/DM managed channel (slack.ts), which still owns
+// @mentions — a watched message that @mentions the bot is left for that path.
 //
-// Roster-parameterized: `createSlackAmbientChannel(roster)` builds the managed
-// Slack channel from the same roster and dispatches qualifying replies into it.
+// Roster-parameterized: `createSlackAmbientChannel(roster, routes, conveneMaxTurns)`
+// builds the managed Slack channel from the same roster and dispatches qualifying
+// actions into it, carrying a routing directive so the front desk picks the deskmate.
 //
 // Wiring: registered as a SECOND Vercel Connect trigger destination at
 // /eve/v1/slack-ambient, receiving `message.channels` events. Requires the
@@ -19,12 +24,9 @@ import type { Roster } from "../roster.js";
 // bot must be a member of the channel.
 //
 // Every decision is logged with the [ambient] prefix so a single test run shows
-// exactly why it responded or stayed silent.
+// exactly why it reacted, replied, posted, or stayed silent.
 
 const CONNECTOR_UID = process.env.SLACK_CONNECTOR ?? "slack/deskmate";
-// Gate model. Default to the same gateway model the agent uses (known-good on this
-// deployment); override with DESKMATE_GATE_MODEL (e.g. a cheaper haiku) once proven.
-const GATE_MODEL = process.env.DESKMATE_GATE_MODEL ?? "anthropic/claude-sonnet-4.6";
 
 const creds = connectSlackCredentials(CONNECTOR_UID);
 const log = (...a: unknown[]) => console.log("[ambient]", ...a);
@@ -66,39 +68,34 @@ async function getBotUserId(): Promise<string | null> {
   return botUserIdCache;
 }
 
-/** True when the bot has already posted in this thread (so we don't barge into strangers' threads). */
-async function deskmateInThread(channelId: string, threadTs: string, botUserId: string): Promise<{ joined: boolean; recent: string }> {
-  const r = await slackApi("conversations.replies", { channel: channelId, ts: threadTs, limit: 30 });
+/** Add ONE emoji reaction to a message. `already_reacted` is a no-op, not an error. */
+async function addReaction(channelId: string, ts: string, name: string): Promise<void> {
+  const r = await slackApi("reactions.add", { channel: channelId, timestamp: ts, name });
+  if (!r?.ok && r?.error !== "already_reacted") log(`reactions.add ${name} error:`, r?.error);
+}
+
+/**
+ * Fetch the thread rooted at `ts` and return the last ~6 lines as `recent` (context
+ * for the gate) plus the raw `messages` (for the reply cooldown check).
+ */
+async function threadContext(channelId: string, ts: string, botUserId: string): Promise<{ recent: string; messages: any[] }> {
+  const r = await slackApi("conversations.replies", { channel: channelId, ts, limit: 30 });
   const messages: any[] = r?.ok && Array.isArray(r.messages) ? r.messages : [];
-  const joined = messages.some((m) => m?.user === botUserId);
   const recent = messages
     .slice(-6)
     .map((m) => `${m?.user === botUserId ? "Deskmate" : "user"}: ${String(m?.text ?? "").slice(0, 400)}`)
     .join("\n");
-  log(`participation: replies=${messages.length} joined=${joined}`);
-  return { joined, recent };
+  return { recent, messages };
 }
 
-/** LLM gate: should Deskmate act on this new thread message? Fails closed (silent). */
-async function shouldRespond(text: string, recent: string): Promise<boolean> {
-  try {
-    const { text: verdict } = await generateText({
-      model: GATE_MODEL,
-      prompt:
-        "You gate whether an AI teammate named Deskmate should reply to a NEW message in a Slack thread it is already part of. " +
-        "Deskmate routes questions to specialist coworkers (DevOps/incidents, product metrics, etc.).\n\n" +
-        'Answer "YES" only if the new message is plausibly directed at Deskmate or is a task/question it could help with ' +
-        "(a follow-up question, a request, a report to analyze). " +
-        'Answer "NO" for human-to-human chatter, acknowledgements ("thanks", "ok", "got it"), or anything not for Deskmate. ' +
-        "When unsure, answer NO.\n\n" +
-        `Recent thread:\n${recent}\n\nNEW message: ${text}\n\nAnswer with exactly YES or NO.`,
-    });
-    log(`gate verdict: "${verdict.trim().slice(0, 30)}"`);
-    return /^\s*yes\b/i.test(verdict);
-  } catch (err) {
-    log(`gate ERROR (model=${GATE_MODEL}), staying silent:`, (err as Error)?.message ?? err);
-    return false;
-  }
+/** Best-effort daily cap: count the bot's own TOP-LEVEL posts in this channel in the last 24h. */
+async function postDailyCapReached(channelId: string, botUserId: string, cap: number): Promise<boolean> {
+  if (cap <= 0) return true;
+  const oldest = (Math.floor(Date.now() / 1000) - 24 * 60 * 60).toString();
+  const r = await slackApi("conversations.history", { channel: channelId, oldest, limit: 100 });
+  const messages: any[] = r?.ok && Array.isArray(r.messages) ? r.messages : [];
+  const mine = messages.filter((m) => m?.user === botUserId && !m?.thread_ts).length;
+  return mine >= cap;
 }
 
 function rememberEvent(eventId: string | undefined): boolean {
@@ -150,6 +147,14 @@ export function createSlackAmbientChannel(
         return Response.json({ challenge: envelope.challenge });
       }
 
+      // Slack retries deliveries it thinks failed; our fast "ok" ack usually
+      // prevents that, but drop any retry outright so a slow first pass can't be
+      // processed twice (the event_id dedupe below is the in-memory backstop).
+      if (req.headers.get("x-slack-retry-num")) {
+        log("skip: slack retry");
+        return new Response("ok");
+      }
+
       const event = envelope?.event;
       log(
         `inbound: type=${event?.type} subtype=${event?.subtype ?? "-"} bot=${event?.bot_id ? "y" : "n"}` +
@@ -166,15 +171,13 @@ export function createSlackAmbientChannel(
         return new Response("ok");
       }
       const channelId: string | undefined = event.channel;
-      const threadTs: string | undefined = event.thread_ts;
       const userId: string | undefined = event.user;
       const text: string = typeof event.text === "string" ? event.text : "";
-      if (!channelId || !threadTs || !userId || !text.trim()) {
-        log("skip: missing channel/thread_ts/user/text (not a thread reply)");
-        return new Response("ok");
-      }
-      if (threadTs === event.ts) {
-        log("skip: message is the thread root, not a reply");
+      // Top-level messages (no thread_ts) are now valid — the thread root is the
+      // message's own ts. Thread replies keep their thread_ts as the root.
+      const rootTs: string = event.thread_ts ?? event.ts;
+      if (!channelId || !userId || !text.trim()) {
+        log("skip: missing channel/user/text");
         return new Response("ok");
       }
 
@@ -182,17 +185,56 @@ export function createSlackAmbientChannel(
       args.waitUntil(
         (async () => {
           try {
+            if (watchDisabled()) return log("skip: DESKMATE_WATCH_DISABLED");
+            const route = resolveRoute({ id: channelId }, routes);
+            const watch = resolveWatch(route ? routes[channelId] : null);
+            if (!route || !watch) return log("skip: channel not opted into watch");
+
             const botUserId = await getBotUserId();
-            if (!botUserId) return log("skip: could not resolve botUserId");
-            if (userId === botUserId) return log("skip: message is from the bot");
-            if (text.includes(`<@${botUserId}>`)) return log("skip: message @mentions the bot (managed channel handles it)");
-            const { joined, recent } = await deskmateInThread(channelId, threadTs, botUserId);
-            if (!joined) return log("skip: Deskmate has not posted in this thread");
-            if (!(await shouldRespond(text, recent))) return log("decision: gate said NO — staying silent");
-            log("decision: dispatching a reply into the thread");
+            if (!botUserId) return log("skip: no botUserId");
+            if (userId === botUserId) return log("skip: bot's own message");
+            if (text.includes(`<@${botUserId}>`)) return log("skip: @mention → managed channel handles it");
+
+            const { recent, messages } = await threadContext(channelId, rootTs, botUserId);
+
+            const verdict = await classifyEvent({
+              text,
+              recent,
+              toggles: { react: watch.react, reply: watch.reply, post: watch.post, palette: watch.palette },
+            });
+            log(`verdict: ${verdict.action}${verdict.emoji ? " :" + verdict.emoji + ":" : ""} — ${verdict.reason ?? ""}`);
+
+            if (verdict.action === "ignore") return;
+
+            if (verdict.action === "react" && verdict.emoji) {
+              await addReaction(channelId, event.ts, verdict.emoji);
+              return;
+            }
+
+            if (
+              verdict.action === "reply" &&
+              withinCooldown(messages, botUserId, Number.parseFloat(event.ts), watch.replyCooldownMin)
+            ) {
+              return log("skip: within reply cooldown");
+            }
+
+            // TODO(approvePosts): HITL approve/reject before a proactive post — not yet wired (post defaults off).
+            if (verdict.action === "post" && (await postDailyCapReached(channelId, botUserId, watch.postDailyCap))) {
+              return log("skip: daily post cap reached");
+            }
+
+            const directive =
+              watch.picker === "routed"
+                ? `[routing] This Slack channel maps to the \`${route.deskmate}\` deskmate. You are proactively engaging (no one @mentioned you). Delegate to \`${route.deskmate}\`.`
+                : `[routing] You are proactively engaging in this channel (no one @mentioned you). Pick the best-matching deskmate by domain.`;
+
+            // `args.receive` (CrossChannelReceiveOptions) takes only { message, target,
+            // auth } — no `context` field — so the routing hint is prepended to the
+            // message (mirrors how onAppMention returns { auth, context } on the
+            // managed channel, but that hook is @mention-only and not available here).
             await args.receive(slack, {
-              message: text,
-              target: { channelId, threadTs },
+              message: `${directive}\n\n[proactive:${verdict.action}] ${text}`,
+              target: verdict.action === "reply" ? { channelId, threadTs: rootTs } : { channelId },
               auth: {
                 authenticator: "slack",
                 issuer: "slack",
@@ -202,7 +244,7 @@ export function createSlackAmbientChannel(
                 attributes: { teamId: envelope?.team_id ?? null, channelId },
               },
             });
-            log("dispatched ok");
+            log(`dispatched proactive ${verdict.action}`);
           } catch (err) {
             log("handler error:", (err as Error)?.message ?? err);
           }
