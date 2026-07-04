@@ -43,6 +43,20 @@ export default defineTeam({
     },
   },
 
-  // No channel routing overrides by default.
-  channels: {},
+  // Proactive watching is opt-in per channel. Uncomment and set a real Slack channel id
+  // (the Cxxxx from the channel's "Copy link") to have a deskmate watch it.
+  channels: {
+    // "C0123INCIDENTS": {
+    //   deskmate: "devops",
+    //   watch: {
+    //     react: true,        // add topic-appropriate emoji reactions (👀/✅/🎉/⚠️…)
+    //     reply: true,        // answer in-thread when it can help
+    //     post: false,        // top-level posts (loudest) — off by default
+    //     picker: "routed",   // "routed" = the channel's deskmate; "frontdesk" = pick by domain
+    //     // digest: true,    // include this channel in the daily scheduled sweep
+    //   },
+    // },
+  },
+  // Team-level sweep cadence (one static cron; only used if a channel sets digest: true).
+  // sweep: { cron: "0 9 * * 1-5" },
 });
