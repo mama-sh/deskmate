@@ -5,10 +5,12 @@
   "bump-minor-pre-major": true,
   "packages": {
     "packages/core": {
-      "release-type": "node"
+      "release-type": "node",
+      "initial-version": "0.1.0"
     },
     "packages/cli": {
-      "release-type": "node"
+      "release-type": "node",
+      "initial-version": "0.1.0"
     }
   }
 }
