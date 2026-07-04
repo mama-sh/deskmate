@@ -17,7 +17,7 @@ export function resolveEveDir(cwd: string): string {
     pkgPath = require.resolve("eve/package.json");
   } catch {
     throw new Error(
-      "eve isn't installed in this project — run `npm install eve` (or pnpm/yarn add) first.",
+      "eve isn't installed in this project — run `npm install eve` (or `pnpm add eve` / `yarn add eve`) first.",
     );
   }
   return dirname(pkgPath);

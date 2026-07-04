@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { deploy, type DeployDeps } from "../src/deploy.js";
+import { deploy, runCommand, type DeployDeps } from "../src/deploy.js";
 
 function makeDeps(runCodes: number[] = [0, 0]) {
   const calls: string[] = [];
@@ -28,7 +28,7 @@ describe("deploy", () => {
     expect(code).toBe(0);
     expect(calls).toEqual([
       "sync",
-      "run:vercel build --prod [xfw]",
+      "run:vercel build --prod --yes [xfw]", // passthrough args reach the build too
       "patch",
       "run:vercel deploy --prebuilt --prod --yes",
     ]);
@@ -40,5 +40,14 @@ describe("deploy", () => {
     expect(code).toBe(2);
     expect(calls).toEqual(["sync", "run:vercel build --prod [xfw]"]);
     expect(deps.patch).not.toHaveBeenCalled();
+  });
+});
+
+describe("runCommand", () => {
+  it("resolves non-zero (never hangs) when the command can't be spawned", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const code = await runCommand("deskmate-no-such-binary-zzz", [], process.cwd());
+    expect(code).not.toBe(0);
+    vi.restoreAllMocks();
   });
 });
