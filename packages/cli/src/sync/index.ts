@@ -16,7 +16,10 @@ export const CONFIG_FILE = "deskmate.config.ts";
  * flag; on older Node the import throws and we surface that hint. (The generated
  * tree itself targets Node 24 — see the root package.json `engines`.)
  */
-export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
+export async function syncCommand(
+  cwd: string = process.cwd(),
+  opts: { quiet?: boolean } = {},
+): Promise<void> {
   const configPath = join(cwd, CONFIG_FILE);
   if (!existsSync(configPath)) {
     throw new Error(`no ${CONFIG_FILE} found in ${cwd}. Run \`deskmate add <id>\` first.`);
@@ -69,8 +72,12 @@ export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
     writeFileSync(path, contents);
   }
 
-  console.log(
-    `✓ deskmate sync: wrote ${plan.writes.length} file(s), removed ${plan.deletes.length} stale subagent dir(s).`,
-  );
-  for (const w of plan.warnings) console.log(`  ⚠ ${w}`);
+  // Watch-mode re-syncs pass `{ quiet: true }`: they run under an interactive TUI,
+  // so any stray stdout here would corrupt the display. Default path is unchanged.
+  if (!opts.quiet) {
+    console.log(
+      `✓ deskmate sync: wrote ${plan.writes.length} file(s), removed ${plan.deletes.length} stale subagent dir(s).`,
+    );
+    for (const w of plan.warnings) console.log(`  ⚠ ${w}`);
+  }
 }

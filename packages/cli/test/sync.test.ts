@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -57,5 +57,24 @@ describe("syncCommand", () => {
 
     // The deskmate itself is still fully generated (agent.ts recreated fresh).
     expect(existsSync(join(cwd, "agent/subagents/devops/agent.ts"))).toBe(true);
+  });
+
+  // `{ quiet: true }` suppresses the summary/warning logs (watch-mode re-syncs run
+  // under an interactive TUI, where stray stdout would corrupt the display) while
+  // still performing every file write.
+  it("writes files but logs nothing when { quiet: true }", async () => {
+    cwd = mkdtempSync(join(tmpdir(), "deskmate-sync-"));
+    writeFileSync(join(cwd, "deskmate.config.ts"), CONFIG);
+    mkdirSync(join(cwd, "roles/devops"), { recursive: true });
+    writeFileSync(join(cwd, "roles/devops/instructions.md"), "# DevOps\n");
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await syncCommand(cwd, { quiet: true });
+      expect(logSpy).not.toHaveBeenCalled();
+      expect(existsSync(join(cwd, "agent", "agent.ts"))).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 });
