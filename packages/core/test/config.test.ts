@@ -66,4 +66,28 @@ describe("defineTeam", () => {
     });
     expect(team.channels.C0INCIDENTS).toEqual({ deskmate: "devops", lock: true });
   });
+
+  it("accepts an optional per-deskmate voice line", () => {
+    const team = defineTeam({
+      deskmates: {
+        devops: {
+          role: "devops",
+          emoji: ":wrench:",
+          displayName: "DevOps Engineer",
+          summary: "Triages incidents.",
+          voice: "Terse SRE. Leads with the punchline.",
+        },
+      },
+    });
+    expect(team.deskmates.devops.voice).toBe("Terse SRE. Leads with the punchline.");
+  });
+
+  it("leaves voice undefined when omitted", () => {
+    const team = defineTeam({
+      deskmates: {
+        devops: { role: "devops", emoji: ":wrench:", displayName: "DevOps", summary: "x" },
+      },
+    });
+    expect(team.deskmates.devops.voice).toBeUndefined();
+  });
 });
