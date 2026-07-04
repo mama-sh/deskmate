@@ -1,13 +1,21 @@
 name: release-please
 
-# Versioning is automated with Release Please (https://github.com/googleapis/release-please).
-# On every push to main it reads the Conventional Commits since the last release and
-# maintains a single "release PR" that bumps the version in package.json and updates
-# CHANGELOG.md. Merging that PR tags vX.Y.Z and publishes a GitHub Release.
+# Versioning + npm publishing, automated with Release Please
+# (https://github.com/googleapis/release-please).
 #
-# One-time repo setting required for the Action to open the release PR:
-#   Settings → Actions → General → Workflow permissions →
-#   enable "Allow GitHub Actions to create and approve pull requests".
+# On every push to main it maintains a per-package "release PR" (for
+# @deskmate/core and the deskmate CLI) that bumps the version + CHANGELOG.
+# Merging a release PR tags the package (e.g. @deskmate/core-v1.2.3), creates a
+# GitHub Release, and — via the publish steps below — publishes the released
+# package(s) to npm with `pnpm publish` (which rewrites workspace:* deps to the
+# concrete version).
+#
+# One-time repo setup required:
+#   1. Settings → Actions → General → Workflow permissions →
+#        enable "Allow GitHub Actions to create and approve pull requests".
+#   2. Settings → Secrets and variables → Actions → add secret `NPM_TOKEN`:
+#        an npm automation (or granular) token with publish rights to the
+#        @deskmate scope and the `deskmate` package. Without it, publish fails.
 
 on:
   push:
@@ -26,6 +34,43 @@ jobs:
       # Pinned to a full commit SHA for supply-chain safety + reproducible runs.
       # Bump the SHA (and the version comment) when upgrading the action.
       - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
+        id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # --- Publish to npm, only when a release PR was just merged ---
+      # release-please sets `releases_created` + `paths_released` on the merge
+      # commit. Build the workspace, then publish each released package.
+      - if: ${{ steps.release.outputs.releases_created == 'true' }}
+        uses: actions/checkout@v4
+      - if: ${{ steps.release.outputs.releases_created == 'true' }}
+        uses: pnpm/action-setup@v4
+      - if: ${{ steps.release.outputs.releases_created == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - if: ${{ steps.release.outputs.releases_created == 'true' }}
+        run: pnpm install --frozen-lockfile
+      - if: ${{ steps.release.outputs.releases_created == 'true' }}
+        run: pnpm run build:packages
+      - name: Publish released packages to npm
+        if: ${{ steps.release.outputs.releases_created == 'true' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          RELEASED: ${{ steps.release.outputs.paths_released }}
+        run: |
+          set -euo pipefail
+          # Publish in dependency order (core before its dependent cli), and only
+          # the paths release-please actually bumped this run. `pnpm publish`
+          # rewrites the workspace:* dep on @deskmate/core to the concrete version.
+          for pkg in packages/core packages/cli; do
+            if echo "$RELEASED" | jq -e --arg p "$pkg" 'index($p) != null' >/dev/null; then
+              echo "→ publishing $pkg"
+              ( cd "$pkg" && pnpm publish --access public --no-git-checks )
+            else
+              echo "· $pkg not released this run, skipping"
+            fi
+          done
