@@ -1,0 +1,13 @@
+{
+  "planPath": "docs/plans/2026-07-04-deskmate-iteration-loop.md",
+  "tasks": [
+    {"id": 7, "subject": "Task 1: Add voice field to DeskmateConfig", "status": "completed"},
+    {"id": 8, "subject": "Task 2: Create shared house-style asset + export", "status": "completed"},
+    {"id": 9, "subject": "Task 3: Compose house-style + voice into subagent instructions", "status": "completed", "blockedBy": [7, 8]},
+    {"id": 10, "subject": "Task 4: Front-desk continuity + voice note", "status": "completed"},
+    {"id": 11, "subject": "Task 5: Seed voice through deskmate add + catalog manifests", "status": "completed", "blockedBy": [7]},
+    {"id": 12, "subject": "Task 6: Starter example voices + anti-slop guard", "status": "completed", "blockedBy": [9, 11]},
+    {"id": 13, "subject": "Task 7: Verify end-to-end + docs", "status": "completed", "blockedBy": [10, 12]}
+  ],
+  "lastUpdated": "2026-07-04"
+}
