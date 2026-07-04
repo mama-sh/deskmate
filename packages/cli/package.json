@@ -1,11 +1,19 @@
 {
-  "name": "deskmate",
+  "name": "@deskmate/cli",
   "version": "0.0.0",
   "type": "module",
   "bin": {
     "deskmate": "./bin/deskmate.mjs"
   },
   "files": ["dist", "bin"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mama-sh/deskmate.git",
+    "directory": "packages/cli"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/postbuild.mjs",
     "prepack": "pnpm -w run build:packages",

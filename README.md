@@ -8,13 +8,14 @@ request to the right deskmate, which answers from your data over MCP. Every
 **write** waits for a human to approve it in the Slack thread.
 
 Deskmate is an **importable npm package, not a repo to fork.** You add
-`@deskmate/core` (the engine) and the `deskmate` CLI to your own project, describe
-your team in a single **`deskmate.config.ts`**, run **`deskmate sync`** to generate
+`@deskmate/core` (the engine) and `@deskmate/cli` (the CLI, which provides the
+`deskmate` command) to your own project, describe your team in a single
+**`deskmate.config.ts`**, run **`deskmate sync`** to generate
 the Eve app, and `eve deploy`. Pull deskmates from a built-in **catalog** or author
 your own.
 
 ```bash
-pnpm add @deskmate/core deskmate eve zod   # Node 24+ required (see Caveats)
+pnpm add @deskmate/core @deskmate/cli eve zod   # Node 24+ required (see Caveats)
 ```
 
 `eve` and `zod` are direct deps: the generated `agent/agent.ts` imports `eve`, the
@@ -89,7 +90,7 @@ build one yourself:
 # 1. Install into your project. Node 24+ is required (see Caveats). `eve` + `zod`
 #    are direct deps too — the generated app imports `eve`, the copied role tools
 #    import `zod`, and you run the `eve` CLI.
-pnpm add @deskmate/core deskmate eve zod
+pnpm add @deskmate/core @deskmate/cli eve zod
 
 # 2. Create deskmate.config.ts (see "Configure your team"), starting minimal:
 #      import { defineTeam } from "@deskmate/core";
@@ -285,7 +286,7 @@ entry, then `deskmate sync` + redeploy. They can't be added to a running bot.
   before `deskmate sync` / `eve build`.
 - **Consumers don't build; the library does.** Your app stays no-build — `deskmate sync`
   is the only generation step, and Node type-strips your `.ts` at runtime. The distributed
-  packages (`@deskmate/core`, the `deskmate` CLI) are themselves compiled to `.js` before
+  packages (`@deskmate/core`, `@deskmate/cli`) are themselves compiled to `.js` before
   publish, because Node does **not** type-strip files inside `node_modules`.
 - **Vercel-only today.** Eve's durable runtime is Vercel-only ("other platforms coming
   soon") — self-hosting means hosting on *your own* Vercel account.
@@ -306,7 +307,7 @@ across the whole tree.
 packages/
   core/     @deskmate/core   Engine: defineTeam/defineDeskmate, front-desk router +
                              convene loop, identity/avatars, channel routing, MCP helpers.
-  cli/      deskmate         The `deskmate` CLI (add/remove/list/mcp-add/sync); bundles
+  cli/      @deskmate/cli   The `deskmate` CLI (add/remove/list/mcp-add/sync); bundles
                              the catalog content.
   catalog/                  Copy-from role content (the 5 roles + connection examples).
                              Not a published package — the CLI bundles it.
@@ -318,7 +319,7 @@ examples/
 ```bash
 git clone https://github.com/mama-sh/deskmate && cd deskmate
 pnpm install
-pnpm run build:packages     # compile @deskmate/core + deskmate CLI to dist/ (see below)
+pnpm run build:packages     # compile @deskmate/core + @deskmate/cli to dist/ (see below)
 pnpm -r typecheck
 pnpm -r test
 pnpm --filter starter build # deskmate sync && eve build — the end-to-end proof

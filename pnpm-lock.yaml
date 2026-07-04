@@ -33,6 +33,9 @@ importers:
 
   examples/starter:
     dependencies:
+      '@deskmate/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
       '@deskmate/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -42,9 +45,6 @@ importers:
       ai:
         specifier: ^7.0.0
         version: 7.0.8(zod@4.4.3)
-      deskmate:
-        specifier: workspace:*
-        version: link:../../packages/cli
       eve:
         specifier: ^0.17.1
         version: 0.17.1(ai@7.0.8(zod@4.4.3))(vite@8.1.1(@types/node@24.13.2))

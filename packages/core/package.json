@@ -12,6 +12,14 @@
     "./front-desk-instructions": { "types": "./dist/front-desk-instructions.d.ts", "default": "./dist/front-desk-instructions.js" }
   },
   "files": ["dist"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mama-sh/deskmate.git",
+    "directory": "packages/core"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').copyFileSync('src/front-desk-instructions.md','dist/front-desk-instructions.md')\"",
     "prepack": "pnpm -w run build:packages",
