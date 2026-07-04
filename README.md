@@ -333,7 +333,9 @@ sweep: { cron: "0 9 * * 1-5" },
 
 `digest: true` on any channel makes `deskmate sync` generate
 `agent/schedules/deskmate-sweep.ts`, a single team-level cron that reviews each
-digest channel and posts/reacts only if something warrants it.
+digest channel and posts/reacts only if something warrants it. A `digest` channel
+only posts a scheduled top-level update when `post: true`; with `post: false` the
+sweep may only react or reply in-thread, never open a new top-level message.
 
 > **Known follow-up:** `approvePosts` (a human approve/reject gate before a top-level
 > post) is accepted in config but its enforcement is **not yet wired**. Because `post`

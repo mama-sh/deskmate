@@ -4,13 +4,13 @@ import type { Roster } from "../roster.js";
 
 export const DEFAULT_SWEEP_CRON = "0 9 * * 1-5";
 
-export type SweepTarget = { channelId: string; deskmate: string };
+export type SweepTarget = { channelId: string; deskmate: string; post: boolean };
 
 /** Channels opted into the scheduled sweep (watch.digest === true). */
 export function sweepTargets(routes: Record<string, ChannelRoute>): SweepTarget[] {
   return Object.entries(routes)
     .filter(([, r]) => r.watch?.digest === true)
-    .map(([channelId, r]) => ({ channelId, deskmate: r.deskmate }));
+    .map(([channelId, r]) => ({ channelId, deskmate: r.deskmate, post: r.watch?.post === true }));
 }
 
 /**
@@ -30,12 +30,14 @@ export function createDeskmateSweep(
     async run({ receive, waitUntil, appAuth }) {
       for (const t of targets) {
         const name = roster[t.deskmate]?.displayName ?? t.deskmate;
+        const action = t.post
+          ? "Post a short update, reply in-thread, or react — but only if something genuinely warrants it; otherwise finish silently."
+          : "Reply in-thread or react if something genuinely warrants it. Do NOT create a new top-level post. Otherwise finish silently.";
         waitUntil(
           receive(opts.slack as any, {
             message:
               `[routing] Delegate to the \`${t.deskmate}\` deskmate (${name}).\n\n` +
-              `[proactive:sweep] Review recent activity in this channel. Post a short update ` +
-              `or react ONLY if something genuinely warrants it; otherwise finish silently.`,
+              `[proactive:sweep] Review recent activity in this channel. ${action}`,
             target: { channelId: t.channelId },
             auth: appAuth,
           }),

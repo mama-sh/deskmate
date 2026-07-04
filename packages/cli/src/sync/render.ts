@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import type { ChannelRoute, TeamConfig } from "@deskmate/core";
+import { DEFAULT_SWEEP_CRON } from "@deskmate/core";
 
 // Lazy accessor for core's front-desk prose. Importing it at module top-level made
 // EVERY CLI command read core's `.md` at startup (this module is on the shared
@@ -180,7 +181,7 @@ export function renderSubagentInstructions(roleInstructions: string, voice?: str
  * when a channel opts into `watch.digest` (see plan.ts). One team-level cron.
  */
 export function renderDeskmateSweepSchedule(team: TeamConfig): string {
-  const cron = team.sweep?.cron ?? "0 9 * * 1-5";
+  const cron = team.sweep?.cron ?? DEFAULT_SWEEP_CRON;
   return `${BANNER}
 import { createDeskmateSweep } from "@deskmate/core";
 import { DESKMATES } from "../lib/deskmates.js";

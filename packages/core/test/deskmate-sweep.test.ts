@@ -11,7 +11,13 @@ describe("sweepTargets", () => {
   it("selects only channels with watch.digest", () => {
     expect(sweepTargets(routes as any).map((t) => t.channelId)).toEqual(["C0A"]);
   });
-  it("carries the routed deskmate on each target", () => {
-    expect(sweepTargets(routes as any)).toEqual([{ channelId: "C0A", deskmate: "devops" }]);
+  it("carries the routed deskmate and post flag on each target", () => {
+    expect(sweepTargets({
+      C0A: { deskmate: "devops", watch: { digest: true } },              // post defaults off
+      C0B: { deskmate: "growth_hacker", watch: { digest: true, post: true } },
+    } as any)).toEqual([
+      { channelId: "C0A", deskmate: "devops", post: false },
+      { channelId: "C0B", deskmate: "growth_hacker", post: true },
+    ]);
   });
 });
