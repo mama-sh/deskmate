@@ -1,0 +1,23 @@
+{
+  "name": "deskmate",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "deskmate": "./bin/deskmate.mjs"
+  },
+  "files": ["dist", "bin"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/postbuild.mjs",
+    "prepack": "pnpm -w run build:packages",
+    "typecheck": "tsc",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@deskmate/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.x",
+    "typescript": "7.0.1-rc",
+    "vitest": "^4.1.9"
+  }
+}

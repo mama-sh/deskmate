@@ -1,24 +1,12 @@
 {
-  "name": "deskmate",
+  "name": "deskmate-monorepo",
   "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "imports": {
-    "#*": "./agent/*",
-    "#evals/*": "./evals/*",
-    "#scripts/env": "./scripts/lib/env.ts",
-    "#scripts/mcp-template": "./scripts/lib/mcp-template.ts"
-  },
   "scripts": {
-    "build": "eve build",
-    "dev": "eve dev",
-    "start": "eve start",
-    "typecheck": "tsc",
-    "test": "vitest run",
-    "deskmate:add": "node scripts/deskmate.ts add",
-    "deskmate:remove": "node scripts/deskmate.ts remove",
-    "deskmate:list": "node scripts/deskmate.ts list",
-    "deskmate:mcp:add": "node scripts/deskmate.ts mcp-add",
-    "deskmate:init": "node scripts/deskmate.ts init"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "build:packages": "pnpm -r --filter=\"./packages/*\" build"
   },
   "packageManager": "pnpm@10.28.2",
   "dependencies": {

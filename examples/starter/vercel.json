@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm -w run build:packages && deskmate sync && eve build",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "build": {
+    "env": {
+      "VERCEL_USE_EXPERIMENTAL_FRAMEWORKS": "1"
+    }
+  }
+}

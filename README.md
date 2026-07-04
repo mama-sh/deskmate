@@ -7,20 +7,26 @@ deployment. Summon them by tagging **`@deskmate`**; a front-desk router hands th
 request to the right deskmate, which answers from your data over MCP. Every
 **write** waits for a human to approve it in the Slack thread.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmama-sh%2Fdeskmate&project-name=deskmate&repository-name=deskmate&env=AI_GATEWAY_API_KEY&envDescription=Optional%3A%20model%20access%20%28OIDC%20also%20works%20once%20linked%29)
+Deskmate is an **importable npm package, not a repo to fork.** You add
+`@deskmate/core` (the engine) and the `deskmate` CLI to your own project, describe
+your team in a single **`deskmate.config.ts`**, run **`deskmate sync`** to generate
+the Eve app, and `eve deploy`. Pull deskmates from a built-in **catalog** or author
+your own.
 
-> The button forks this repo, creates a Vercel project, and builds it. Model access
-> works via project OIDC (AI Gateway). It does **not** set up Slack or MCP tools —
-> finish those below. Requires a public repo — this one lives at `github.com/mama-sh/deskmate`.
+```bash
+pnpm add @deskmate/core deskmate eve zod   # Node 24+ required (see Caveats)
+```
 
-Pick deskmates from a built-in **library**, or author your own.
+`eve` and `zod` are direct deps: the generated `agent/agent.ts` imports `eve`, the
+copied role tools import `zod`, and you run the `eve` CLI — under pnpm's strict layout
+those must be installed directly, not relied on as transitive deps.
 
 ---
 
-## Architecture
+## How it works
 
 ```
-Slack  ──@deskmate──▶  Front desk (agent/instructions.md)
+Slack  ──@deskmate──▶  Front desk (generated agent/instructions.md)
                           │  routes by reading each deskmate's description
                           ▼
               ┌───────────┴────────────┐
@@ -36,22 +42,92 @@ reads run free  ·  writes pause for a human (approve/reject buttons in-thread)
 Slack credentials + durable pause/resume handled by Vercel (Connect + Workflows)
 ```
 
-- **Front desk** — a thin router (`agent/instructions.md`). It does no work; it
-  delegates to a deskmate and relays the answer.
-- **Deskmates** — Eve [subagents](https://eve.dev/docs/subagents) under
-  `agent/subagents/<id>/`. Each is isolated: its own instructions, skills, read
-  tools, and MCP connection.
-- **The library** — `library/deskmates/<id>/` is the catalog. `pnpm deskmate:add
-  <id>` copies one into `agent/subagents/` and regenerates the roster registry.
-- **Human-in-the-loop** — any tool with `approval: always()` pauses for a human.
-  Eve's durable sessions (Vercel Workflows) make the wait free; nothing is held
-  in memory while it's parked.
-- **Collaboration** — most requests go to one deskmate. When a request spans
-  domains, the front desk convenes several: each posts in the thread under its own
-  name and avatar and can **tag** a teammate ("cc 🔧 DevOps Engineer") to pull them
-  in, until the question is answered. Bounded by `DESKMATE_MAX_TURNS` (default 6).
+- **Front desk** — a thin router. It does no work; it delegates to a deskmate and
+  relays the answer. Its prose ships in `@deskmate/core`; `deskmate sync` writes it
+  to the generated `agent/instructions.md`.
+- **Deskmates** — Eve [subagents](https://eve.dev/docs/subagents) under the
+  generated `agent/subagents/<id>/`. Each is isolated: its own instructions, skills,
+  read tools, and MCP connection.
+- **The engine** — `@deskmate/core` holds the router + convene loop, identity/avatars,
+  channel routing, and skill/MCP helpers. It's the only import with a stable contract
+  (`defineTeam`, `defineDeskmate`, and the roster helpers).
+- **The catalog** — `packages/catalog/roles/<id>/` is copy-from content bundled in the
+  CLI. `deskmate add <id>` copies one into your editable `roles/<id>/` and appends a
+  roster entry to `deskmate.config.ts`.
+- **Human-in-the-loop** — any tool with `approval: always()` pauses for a human. Eve's
+  durable sessions (Vercel Workflows) make the wait free; nothing is held in memory
+  while it's parked.
+- **Collaboration** — most requests go to one deskmate. When a request spans domains,
+  the front desk convenes several: each posts in the thread under its own name and
+  avatar and can **tag** a teammate ("cc 🔧 DevOps Engineer") to pull them in, until the
+  question is answered. Bounded by `frontDesk.maxTurns` in your config (default 6;
+  surfaced as `DESKMATE_MAX_TURNS`).
 
-## The deskmate library
+## The three kinds of file
+
+A Deskmate project has exactly three kinds of file. You edit the first two; you never
+edit the third.
+
+| Kind | Files | Owner |
+|---|---|---|
+| **Config** | `deskmate.config.ts` | You write it — the single source of truth for the roster |
+| **Authored** | `roles/<id>/instructions.md`, `tools/`, `connections/`, `skills/` | Seeded by `deskmate add`, then **you own + edit** |
+| **Generated** | `agent/**` | `deskmate sync` owns it — committed, "do not edit" |
+
+`deskmate sync` reads your config plus the authored files and regenerates the whole
+`agent/**` tree Eve discovers at build time. Every generated file carries a
+`GENERATED by deskmate sync` banner. **The one rule that keeps it sane: you edit
+config + authored files; `sync` rebuilds `agent/` from scratch at any time.**
+
+## Quickstart
+
+The [`examples/starter`](./examples/starter) app is the reference consumer — a real,
+deployable Deskmate driven by a `deskmate.config.ts` (product_analyst + devops). To
+build one yourself:
+
+```bash
+# 1. Install into your project. Node 24+ is required (see Caveats). `eve` + `zod`
+#    are direct deps too — the generated app imports `eve`, the copied role tools
+#    import `zod`, and you run the `eve` CLI.
+pnpm add @deskmate/core deskmate eve zod
+
+# 2. Create deskmate.config.ts (see "Configure your team"), starting minimal:
+#      import { defineTeam } from "@deskmate/core";
+#      export default defineTeam({ connections: {}, deskmates: {} });
+
+# 3. Pull deskmates from the catalog. Each `add` copies roles/<id>/ into your
+#    repo (instructions, a read tool with seed data, a connection example, a
+#    skill), appends a roster entry to deskmate.config.ts, AND seeds a matching
+#    `connections.<provider>` entry for each connection the role reads (with a
+#    default env prefix — the provider name uppercased, editable in the config).
+deskmate list                      # browse the catalog; • marks ones you've added
+deskmate add product_analyst devops
+
+# 4. Generate the agent/** tree Eve builds. Runs on plain Node 24 — no build step.
+#    (Connections were seeded in step 3; edit their env prefixes first if you like.)
+deskmate sync
+
+# 5. Deploy to YOUR Vercel to turn on the Slack surface.
+eve deploy
+```
+
+Every catalog read tool ships with **seed data**, so a fresh project runs and demos
+with zero external infrastructure. Point a deskmate at real data by setting its MCP
+connection env vars (see the generated `.env.example`).
+
+Test agent logic locally over the HTTP session endpoint (Slack itself can't reach
+localhost — see Caveats):
+
+```bash
+eve dev   # local TUI + HTTP session endpoint; pick a model with /model
+curl -s -X POST http://127.0.0.1:3000/eve/v1/session \
+  -H 'content-type: application/json' \
+  -d '{"message":"how are signups doing this week?"}' -i | grep -i x-eve-session-id
+```
+
+## The deskmate catalog
+
+`deskmate add <id>` seeds any of these editable roles into your project:
 
 | id | Deskmate | Reads from | Ships a |
 |---|---|---|---|
@@ -61,159 +137,230 @@ Slack credentials + durable pause/resume handled by Vercel (Connect + Workflows)
 | `growth_hacker` | 🚀 Growth Hacker | PostHog | read tool (funnel conversion) |
 | `project_manager` | 📋 Project Manager | Linear | read tool (sprint status) |
 
-Each deskmate also vendors a role **skill** (a load-on-demand playbook) from the
-open [skills.sh](https://skills.sh) ecosystem — see `skills/SOURCE.md` in each for
-attribution. `product_analyst` and `devops` ship **pre-activated**; add the rest
-with `pnpm deskmate:add <id>`.
+Each role also vendors a **skill** (a load-on-demand playbook) from the open
+[skills.sh](https://skills.sh) ecosystem — see `skills/SOURCE.md` in the copied role
+for attribution.
 
-> Every tool ships with **seed data**, so the repo runs and demos with zero
-> external infrastructure. Point a deskmate at real data by setting its MCP
-> connection env vars (see `.env.example`) and swapping the seed read for a real one.
+> **Vendored skills are community content.** The role skills come from
+> [skills.sh](https://skills.sh) authors at a range of quality and licensing — treat
+> them as starting points, check `skills/SOURCE.md`, and edit for your team.
 
-## Quickstart
+## Configure your team
+
+`deskmate.config.ts` is the single source of truth. It's a normal TypeScript module
+whose default export is `defineTeam({ … })`:
+
+```ts
+import { defineTeam } from "@deskmate/core";
+
+export default defineTeam({
+  // Default model for the front desk and any deskmate that doesn't override it.
+  // Models resolve through the Vercel AI Gateway.
+  model: "anthropic/claude-sonnet-4.6",
+
+  frontDesk: { maxTurns: 6 }, // safety cap on turns in one multi-deskmate conversation
+
+  // External data each deskmate can read. A `kind: "mcp"` connection maps to an
+  // <ENV>_MCP_URL / <ENV>_MCP_TOKEN pair (regenerated into .env.example by sync).
+  connections: {
+    mixpanel: { kind: "mcp", env: "MIXPANEL" },
+    sentry: { kind: "mcp", env: "SENTRY" },
+  },
+
+  // The roster. Each entry's `role` names the authored roles/<id>/ directory;
+  // `reads` lists the connections that deskmate may query. Identity (emoji /
+  // displayName / summary) lives here so the whole team reads at a glance.
+  deskmates: {
+    product_analyst: {
+      role: "product_analyst",
+      emoji: ":bar_chart:",
+      displayName: "Product Analyst",
+      summary: "Turns product usage data into a short narrative: what changed, why, what to look at next.",
+      skill: "ncklrs/startup-os-skills@product-analyst",
+      reads: ["mixpanel"],
+    },
+    devops: {
+      role: "devops",
+      emoji: ":wrench:",
+      displayName: "DevOps Engineer",
+      summary: "Triages errors and incidents from logs/monitoring, explains likely causes, and proposes (never auto-applies) fixes.",
+      skill: "erichowens/some_claude_skills@logging-observability",
+      reads: ["sentry"],
+    },
+  },
+
+  // Optional: pin Slack channels to a deskmate (see "Route channels").
+  channels: {},
+});
+```
+
+`defineTeam` validates the config: a deskmate whose `reads` names an unknown connection,
+or a channel routing to an unknown deskmate, throws at `deskmate sync` time. See
+[`examples/starter/deskmate.config.ts`](./examples/starter/deskmate.config.ts) for the
+full worked example.
+
+### Manage the roster
+
+The `deskmate` CLI edits your **config + authored files**; `sync` regenerates `agent/`:
 
 ```bash
-git clone https://github.com/mama-sh/deskmate && cd deskmate
-pnpm install            # Node 24+ required
-pnpm test               # 14 unit tests over the tool logic
-pnpm deskmate:list      # see the library; • marks active deskmates
-
-vercel link && vercel env pull   # model access (VERCEL_OIDC_TOKEN)
-pnpm dev                # local TUI + HTTP session endpoint; pick a model with /model
-
-eve deploy              # deploy to YOUR Vercel to turn on the Slack surface
+deskmate list                       # catalog roles; • marks ones you've added
+deskmate add customer_success       # copy roles/customer_success/ + append its roster + connection entries
+deskmate remove growth_hacker       # delete roles/growth_hacker/ + drop its config entry
+deskmate mcp-add <name>             # scaffold a read-only MCP connection into ./connections
+deskmate sync                       # regenerate agent/** from deskmate.config.ts
 ```
 
-Test agent logic locally over the HTTP endpoint:
+`add`/`remove`/`mcp-add` only touch config and the authored `roles/`/`connections/`
+files — always run `deskmate sync` afterward to refresh the generated tree. (Wire it
+into your `build` script — `"build": "deskmate sync && eve build"` — so it runs on every
+deploy; the starter does this.)
 
-```bash
-curl -s -X POST http://127.0.0.1:3000/eve/v1/session \
-  -H 'content-type: application/json' \
-  -d '{"message":"how are signups doing this week?"}' -i | grep -i x-eve-session-id
-```
+### Edit or author a deskmate
 
-## Finish setup (after deploy)
-
-The Deploy button gets you a built project with model access. Connect Slack and
-activate the deskmates you want from this checkout. Slack reaches the **deployed**
-project through [Vercel Connect](https://vercel.com/docs/connect) — there is no
-`SLACK_BOT_TOKEN` or signing secret to manage.
-
-```bash
-vercel link && vercel env pull        # connect this checkout to the deployed project
-pnpm deskmate:init                    # pick deskmates to activate + enter their MCP URLs/tokens
-pnpm deskmate:mcp:add <name> --to <deskmate>   # (optional) add a custom MCP to a deskmate
-# Slack (Vercel Connect):
-export FF_CONNECT_ENABLED=1
-vercel connect create slack --triggers
-vercel connect detach <uid> --yes
-vercel connect attach <uid> --triggers --trigger-path /eve/v1/slack --yes
-vercel deploy                         # redeploy so activated deskmates + MCPs go live
-```
-
-This sets `SLACK_CONNECTOR` and points Slack events at Deskmate's `/eve/v1/slack`
-route. Install the app as **Deskmate**, invite the bot to a channel, and tag
-`@deskmate`. Custom MCPs are build-time: `deskmate:mcp:add` generates a connection
-file, then you redeploy. They can't be added to a running bot.
-
-## Manage your team
-
-`pnpm deskmate:init` is the guided way to activate deskmates and set their MCP env
-in one go (see [Finish setup](#finish-setup-after-deploy)). The manual commands
-below still work for one-off changes:
-
-```bash
-pnpm deskmate:list                       # library + which deskmates are active
-pnpm deskmate:add customer_success       # activate one (or several) from the library
-pnpm deskmate:remove growth_hacker       # deactivate
-```
-
-`add` copies `library/deskmates/<id>/` → `agent/subagents/<id>/` and regenerates
-`agent/lib/deskmates.ts` (the roster registry). To **edit** an active deskmate,
-change the library copy, then `remove` + `add` to refresh it.
-
-### Author a new deskmate
-
-Add a folder under `library/deskmates/<id>/`:
+To customize a deskmate, edit its **authored** files after `deskmate add`, then `sync`:
 
 ```
-library/deskmates/<id>/
-  deskmate.json     # { displayName, emoji, summary, skill, providers }
-  agent.ts          # defineAgent({ description, model }) — description is the routing hint
-  instructions.md   # the role + how it works
+roles/<id>/
+  deskmate.json     # { id, displayName, emoji, summary, skill, providers }
+  instructions.md   # the role + how it works — copied into agent/ VERBATIM
   tools/*.ts        # read tools: a pure, tested function + a thin defineTool wrapper
   connections/*.ts  # read-only MCP (defineMcpClientConnection, tools.allow)
   skills/*/SKILL.md # optional load-on-demand playbooks
 ```
 
-Writes get a human gate by adding `approval: always()` (from `eve/tools/approval`)
-to the tool. Then `pnpm deskmate:add <id>`. The front desk needs no edits — it
-discovers each deskmate from its `description`.
+To author a brand-new deskmate, add a `roles/<id>/` of the same shape, add its entry
+under `deskmates` in `deskmate.config.ts` (identity + `reads`), then `deskmate sync`.
+The front desk needs no edits — it discovers each deskmate from its generated
+`description` (built from `emoji`/`displayName`/`summary`/`role`).
+
+Writes get a human gate by adding `approval: always()` (from `eve/tools/approval`) to
+the tool — the DevOps `record_decision` write is the example.
 
 ## Route channels to a deskmate
 
-Map a Slack channel to a deskmate in `agent/lib/channel-routes.ts`:
+Map a Slack channel to a deskmate in the `channels` block of `deskmate.config.ts`:
 
 ```ts
-export const CHANNEL_ROUTES = {
+channels: {
   C0123INCIDENTS: { deskmate: "devops", lock: true }, // only devops here
   C0456GROWTH:    { deskmate: "growth_hacker" },       // default; others still reachable
-};
+},
 ```
 
-Key by channel id (Slack → channel → "Copy link" → the `Cxxxx`). In a mapped channel
-the front desk routes to that deskmate; `lock: true` restricts the channel to it.
-Unmapped channels and DMs use normal routing. (Enforcement is instruction-level.)
+Key by channel id (Slack → channel → "Copy link" → the `Cxxxx`). In a mapped channel the
+front desk routes to that deskmate; `lock: true` restricts the channel to it. Unmapped
+channels and DMs use normal routing. (Enforcement is instruction-level.)
 
 ## Human-in-the-loop
 
-Reads run free. Any tool with `approval: always()` pauses before it runs and Eve
-renders **approve / reject** buttons in the Slack thread. On approve it completes
-and reports the result; on reject it never runs. The example is the DevOps
-`record_decision` write.
+Reads run free. Any tool with `approval: always()` pauses before it runs and Eve renders
+**approve / reject** buttons in the Slack thread. On approve it completes and reports the
+result; on reject it never runs. The example is the DevOps `record_decision` write.
+
+## Slack setup (Vercel Connect)
+
+Slack reaches the **deployed** project through
+[Vercel Connect](https://vercel.com/docs/connect) — there is no `SLACK_BOT_TOKEN` or
+signing secret to manage. After `eve deploy`, from your project directory:
+
+```bash
+vercel link && vercel env pull        # connect this checkout to the deployed project
+export FF_CONNECT_ENABLED=1
+vercel connect create slack --triggers
+vercel connect detach <uid> --yes
+vercel connect attach <uid> --triggers --trigger-path /eve/v1/slack --yes
+vercel deploy                         # redeploy so the Slack surface goes live
+```
+
+This sets `SLACK_CONNECTOR` and points Slack events at Deskmate's `/eve/v1/slack` route.
+Install the app as **Deskmate**, invite the bot to a channel, and tag `@deskmate`. Custom
+MCP connections are build-time: `deskmate mcp-add` writes a connection file and a config
+entry, then `deskmate sync` + redeploy. They can't be added to a running bot.
 
 ## Caveats (honest)
 
-- **Vercel-only today.** Eve's durable runtime is Vercel-only ("other platforms
-  coming soon") — self-hosting means hosting on *your own* Vercel account.
-- **Slack can't be tested on localhost.** Slack delivers to the deployed project
-  via Connect. Test agent logic locally over the HTTP session endpoint.
-- **Single-deployment, env-token auth.** One organization per deployment; MCP
-  credentials live in env vars. Per-org tenancy is intentionally out of scope
-  (see below).
-- **One shared Slack identity.** This Eve version doesn't expose a per-reply
-  name/icon, so every deskmate answers under one **Deskmate** bot. The roster in
-  `agent/lib/deskmates.ts` is the seam for per-deskmate identity later.
-- **Vendored skills are community content.** The role skills come from
-  [skills.sh](https://skills.sh) authors at a range of quality and licensing —
-  treat them as starting points, check `skills/SOURCE.md`, and edit for your team.
+- **Node 24 is required.** The `deskmate.config.ts` config is loaded as TypeScript via
+  Node's native type-stripping, and Eve hard-gates on Node < 24. Install a matching Node
+  before `deskmate sync` / `eve build`.
+- **Consumers don't build; the library does.** Your app stays no-build — `deskmate sync`
+  is the only generation step, and Node type-strips your `.ts` at runtime. The distributed
+  packages (`@deskmate/core`, the `deskmate` CLI) are themselves compiled to `.js` before
+  publish, because Node does **not** type-strip files inside `node_modules`.
+- **Vercel-only today.** Eve's durable runtime is Vercel-only ("other platforms coming
+  soon") — self-hosting means hosting on *your own* Vercel account.
+- **Slack can't be tested on localhost.** Slack delivers to the deployed project via
+  Connect. Test agent logic locally over the HTTP session endpoint (`eve dev`).
+- **Single-deployment, env-token auth.** One organization per deployment; MCP credentials
+  live in env vars. Per-org tenancy is intentionally out of scope (see Scope).
+- **One shared Slack identity.** This Eve version doesn't expose a per-reply name/icon, so
+  every deskmate answers under one **Deskmate** bot. The generated `agent/lib/deskmates.ts`
+  roster is the seam for per-deskmate identity later.
+
+## Monorepo layout (for contributors)
+
+This repo is a pnpm workspace. Consumers install the published packages; contributors work
+across the whole tree.
+
+```
+packages/
+  core/     @deskmate/core   Engine: defineTeam/defineDeskmate, front-desk router +
+                             convene loop, identity/avatars, channel routing, MCP helpers.
+  cli/      deskmate         The `deskmate` CLI (add/remove/list/mcp-add/sync); bundles
+                             the catalog content.
+  catalog/                  Copy-from role content (the 5 roles + connection examples).
+                             Not a published package — the CLI bundles it.
+examples/
+  starter/                  A real, deployable consumer of @deskmate/core + the reference
+                             quickstart. Dogfood for the whole pipeline.
+```
+
+```bash
+git clone https://github.com/mama-sh/deskmate && cd deskmate
+pnpm install
+pnpm run build:packages     # compile @deskmate/core + deskmate CLI to dist/ (see below)
+pnpm -r typecheck
+pnpm -r test
+pnpm --filter starter build # deskmate sync && eve build — the end-to-end proof
+```
+
+> **`build:packages` is load-bearing.** `@deskmate/core` and the CLI are consumed from
+> their compiled `dist/`, which is **gitignored** and not produced by `pnpm install`. So
+> you must build the packages **before** typecheck/test/example-build, or the CLI and the
+> starter can't resolve `@deskmate/core`. CI (`.github/workflows/ci.yml`) encodes this
+> order on Node 24. (Real consumers get `dist` prebuilt inside `node_modules`, so they just
+> run `deskmate sync && eve build`.)
 
 ## Scope
 
-This repo is the **single-organization OSS core** of Deskmate. It ships a one-click
-Deploy button and a local `deskmate:init` onboarding CLI for **your own** deployment.
+This repo is the **single-organization OSS core** of Deskmate — the engine, the CLI, the
+catalog, and a deployable example. Org-specific rosters (like AddMeIn) live in their **own**
+repo as config-only consumers of `@deskmate/core`: a `deskmate.config.ts`, adapted catalog
+tools/connections, and their own channel routes.
+
 What's intentionally **not** here is the *hosted* layer: multi-organization tenancy, a
-per-tenant secret vault, a no-code/Slack-driven onboarding wizard that connects each
-company's tools, a signup/control-plane/dashboard, billing, and per-tenant
-provisioning. The seams that make that layer additive are already present: connections
-resolve auth per call, and deskmates are a data-driven library.
+per-tenant secret vault, a no-code/Slack-driven onboarding wizard, a signup/control-plane/
+dashboard, billing, and per-tenant provisioning. When that layer exists it becomes a
+separate **private** repo that depends on `@deskmate/core` like any other consumer. The seams
+that make it additive are already present: connections resolve auth per call, and deskmates
+are a data-driven roster.
 
 ## Versioning & releases
 
 Deskmate follows [Semantic Versioning](https://semver.org) (`MAJOR.MINOR.PATCH`) and
 [Conventional Commits](https://www.conventionalcommits.org). Commit types drive the next
-version: `feat:` → minor, `fix:` → patch, `!` / `BREAKING CHANGE:` → major (kept to a
-minor bump while pre-1.0).
+version: `feat:` → minor, `fix:` → patch, `!` / `BREAKING CHANGE:` → major (kept to a minor
+bump while pre-1.0).
 
 Releases are automated with [Release Please](https://github.com/googleapis/release-please).
-On every push to `main` it maintains one **release PR** that bumps `package.json` and
-updates `CHANGELOG.md` from the commits since the last release; merging that PR tags
-`vX.Y.Z` and publishes a GitHub Release — a version ships only when a human merges it.
+On every push to `main` it maintains one **release PR** that bumps the version and updates
+`CHANGELOG.md` from the commits since the last release; merging that PR tags `vX.Y.Z` and
+publishes a GitHub Release — a version ships only when a human merges it.
 
 **One-time repo setup:** the Action opens the release PR, which requires
-**Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create
-and approve pull requests"** to be enabled. That's a repo-admin setting, so turn it on for
-the repo you own (your fork, or the canonical repo if you administer it).
+**Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and
+approve pull requests"** to be enabled. That's a repo-admin setting, so turn it on for the
+repo you administer.
 
 ## Links
 
@@ -222,3 +369,5 @@ the repo you own (your fork, or the canonical repo if you administer it).
 ## License
 
 [Apache-2.0](./LICENSE).
+</content>
+</invoke>
