@@ -7,7 +7,7 @@
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js && rm -rf dist/catalog && mkdir -p dist/catalog && cp -R ../catalog/roles dist/catalog/",
+    "build": "tsc -p tsconfig.build.json && node scripts/postbuild.mjs",
     "typecheck": "tsc",
     "test": "vitest run --passWithNoTests"
   },

@@ -17,7 +17,7 @@ import {
   renderSubagentAgent,
 } from "./render.js";
 
-export type FileWrite = { path: string; contents: string };
+export type FileWrite = { path: string; contents: string | Buffer };
 export type SyncPlan = {
   writes: FileWrite[];
   deletes: string[];
@@ -83,7 +83,8 @@ function walkFiles(root: string, prefix = ""): string[] {
 export function planSync(team: TeamConfig, cwd: string): SyncPlan {
   const writes: FileWrite[] = [];
   const warnings: string[] = [];
-  const out = (rel: string, contents: string) => writes.push({ path: join(cwd, rel), contents });
+  const out = (rel: string, contents: string | Buffer) =>
+    writes.push({ path: join(cwd, rel), contents });
 
   // ── Root files ────────────────────────────────────────────────────────────
   out("agent/agent.ts", renderRootAgent(team));
@@ -150,10 +151,12 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
     // references/templates), copied VERBATIM with their nested structure. These
     // are markdown/asset files Eve discovers under agent/subagents/<id>/skills/;
     // they are copied like instructions.md (no shim, no banner). The `skill`
-    // field in the config stays metadata — sync just copies the tree.
+    // field in the config stays metadata — sync just copies the tree. Read as a
+    // Buffer (no encoding) so a binary asset in a skill (e.g. a diagram PNG/PDF)
+    // is copied byte-for-byte instead of being mangled by UTF-8 decoding.
     const skillsRoot = join(cwd, "roles", role, "skills");
     for (const rel of walkFiles(skillsRoot)) {
-      out(`agent/subagents/${id}/skills/${rel}`, readFileSync(join(skillsRoot, rel), "utf8"));
+      out(`agent/subagents/${id}/skills/${rel}`, readFileSync(join(skillsRoot, rel)));
     }
   }
 
