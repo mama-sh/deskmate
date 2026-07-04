@@ -287,13 +287,21 @@ signing secret to manage. After `deskmate deploy`, from your project directory:
 ```bash
 vercel link && vercel env pull        # connect this checkout to the deployed project
 export FF_CONNECT_ENABLED=1
-vercel connect create slack --triggers
+vercel connect create slack --triggers   # note the connector UID it prints (default: slack/deskmate)
 vercel connect detach <uid> --yes
 vercel connect attach <uid> --triggers --trigger-path /eve/v1/slack --yes
-deskmate deploy                       # redeploy so the Slack surface goes live
 ```
 
-This sets `SLACK_CONNECTOR` and points Slack events at Deskmate's `/eve/v1/slack` route.
+This points Slack events at Deskmate's `/eve/v1/slack` route. Deskmate reads the connector
+UID from `SLACK_CONNECTOR`, which **defaults to `slack/deskmate`** — the `connect` commands
+do **not** set that env var for you. So if your connector's UID is `slack/deskmate` you're
+done; only if you used a different UID do you need to set it and redeploy:
+
+```bash
+vercel env add SLACK_CONNECTOR production   # paste the connector UID from `connect create`
+deskmate deploy                             # redeploy so the new env var takes effect
+```
+
 Install the app as **Deskmate**, invite the bot to a channel, and tag `@deskmate`. Custom
 MCP connections are build-time: `deskmate mcp-add` writes a connection file and a config
 entry, then `deskmate sync` + redeploy. They can't be added to a running bot.
