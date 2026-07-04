@@ -90,4 +90,19 @@ describe("defineTeam", () => {
     });
     expect(team.deskmates.devops.voice).toBeUndefined();
   });
+
+  it("parses a channel watch block with defaults", () => {
+    const team = defineTeam({
+      deskmates: { devops: { role: "devops", emoji: ":x:", displayName: "D", summary: "s" } },
+      channels: { C0INC: { deskmate: "devops", watch: {} } },
+    });
+    expect(team.channels.C0INC.watch).toMatchObject({ react: true, reply: true, post: false, approvePosts: false, picker: "routed" });
+  });
+
+  it("rejects an unknown picker", () => {
+    expect(() => defineTeam({
+      deskmates: { devops: { role: "devops", emoji: ":x:", displayName: "D", summary: "s" } },
+      channels: { C0INC: { deskmate: "devops", watch: { picker: "nope" } } },
+    })).toThrow();
+  });
 });

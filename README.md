@@ -284,6 +284,102 @@ Install the app as **Deskmate**, invite the bot to a channel, and tag `@deskmate
 MCP connections are build-time: `deskmate mcp-add` writes a connection file and a config
 entry, then `deskmate sync` + redeploy. They can't be added to a running bot.
 
+## Proactive watching (opt-in)
+
+By default a deskmate only speaks when tagged. **Proactive watching** lets a deskmate
+watch an **opted-in** channel and act on its own with three escalating gestures — add a
+topic-appropriate emoji **reaction**, drop a threaded **reply**, or make a top-level
+**post** — each decided by a cheap LLM "attention gate" that is biased hard toward staying
+silent. Human-to-human chatter, acknowledgements, and anything not for the teammate are
+ignored. A channel is watched **only** if its route carries a `watch` block; nothing else
+changes.
+
+> **Behavior change (was: ambient replies everywhere).** Previously the ambient channel
+> replied in **any** thread the bot had already joined, with no opt-in. Proactivity is now
+> **opt-in per channel** — a channel with no `watch` block is never watched. If you relied
+> on the old joined-thread behavior, add `watch: { reply: true }` to that channel's route.
+
+### Config
+
+Add a `watch` block to a channel in `deskmate.config.ts`:
+
+```ts
+channels: {
+  C0123INCIDENTS: {
+    deskmate: "devops",
+    watch: {
+      react: true,        // add topic-appropriate emoji reactions (default true)
+      reply: true,        // answer in-thread when it can help (default true)
+      post: false,        // top-level posts — the loudest gesture (default false)
+      picker: "routed",   // "routed" = the channel's deskmate; "frontdesk" = pick by domain
+      // digest: true,    // include in the daily sweep — needs post: true to actually post
+    },
+  },
+},
+
+// Team-level sweep cadence (one static cron; only used when a channel sets digest: true AND post: true).
+sweep: { cron: "0 9 * * 1-5" },
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `react` | `true` | Tier-1 emoji reactions — fired inline, no agent turn |
+| `reply` | `true` | Tier-2 threaded answers, subject to the reply cooldown |
+| `post` | `false` | Tier-2 top-level posts — off by default (the loudest gesture) |
+| `approvePosts` | `false` | HITL approve/reject before a post — **config field only, not yet wired** (see below) |
+| `picker` | `"routed"` | `"routed"` uses the channel's mapped deskmate; `"frontdesk"` picks by domain |
+| `reactionPalette` | curated set | Allowed reaction emoji names; the model can only use these. Default: `eyes`, `white_check_mark`, `tada`, `warning`, `+1` |
+| `digest` | `false` | Include this channel in the scheduled sweep (`sweep.cron`, default `0 9 * * 1-5`). Requires `post: true` — a digest can only post top-level |
+
+A channel with **both** `digest: true` and `post: true` makes `deskmate sync` generate
+`agent/schedules/deskmate-sweep.ts`, a single team-level cron that reviews each such
+channel and posts a short digest only if something warrants it. `digest` requires
+`post: true`: a sweep session has no thread to reply into, so any non-silent output is a
+new top-level post — exactly what `post: false` forbids. A `digest: true` channel with
+`post: false` is therefore skipped, and `deskmate sync` prints a warning.
+
+> **Known follow-up:** `approvePosts` (a human approve/reject gate before a top-level
+> post) is accepted in config but its enforcement is **not yet wired**. Because `post`
+> defaults to `false`, nothing loud ships unprompted — a channel only posts if you
+> explicitly set `post: true`.
+
+### Slack setup delta
+
+Watching reuses the ambient Slack surface, so there's no new route to provision. The
+Slack app must:
+
+- **subscribe to the `message.channels` event** (already used by the ambient trigger), and
+- grant the bot **`channels:history`** (read channel messages for gate context),
+  **`reactions:write`** (add the emoji reactions), and **`chat:write`** (already present
+  for replies/posts).
+
+The bot must be a **member of each watched channel** — invite it just like you would for
+`@deskmate`.
+
+### Env knobs
+
+| Env var | Default | Effect |
+|---|---|---|
+| `DESKMATE_GATE_MODEL` | `anthropic/claude-haiku-4.5` | The cheap gate model (fires on every watched message). Defaults to a Haiku-class model — **verify the id resolves on your Vercel AI Gateway**, and override here if not. |
+| `DESKMATE_WATCH_DISABLED` | unset | Kill switch — set to any non-empty value to switch the whole watch layer off. |
+| `DESKMATE_REPLY_COOLDOWN_MIN` | `10` | Minutes the bot stays quiet in a thread after it replies, so a burst of messages doesn't double-reply. |
+| `DESKMATE_POST_DAILY_CAP` | `3` | Max top-level posts per channel per 24h. |
+
+### Verifying in Slack (manual)
+
+The live Slack behavior can't be exercised from CI — it needs a real workspace. Run this
+checklist by hand after enabling watching:
+
+1. Add a `watch` block to a channel, run `deskmate sync`, and deploy (or `eve dev` +
+   dispatch a message).
+2. Invite the bot to the channel.
+3. Confirm:
+   - an **on-topic** message gets a **threaded reply**;
+   - a clearly-relevant message gets **exactly one** palette **reaction**;
+   - human-to-human **chatter is ignored**;
+   - a **rapid second message** inside the cooldown does **not** double-reply;
+   - with `post: false`, **no top-level posts** appear.
+
 ## Caveats (honest)
 
 - **Node 24 is required.** The `deskmate.config.ts` config is loaded as TypeScript via

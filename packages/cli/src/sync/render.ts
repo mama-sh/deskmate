@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import type { ChannelRoute, TeamConfig } from "@deskmate/core";
+import { DEFAULT_SWEEP_CRON } from "@deskmate/core";
 
 // Lazy accessor for core's front-desk prose. Importing it at module top-level made
 // EVERY CLI command read core's `.md` at startup (this module is on the shared
@@ -68,6 +69,7 @@ export function renderChannelRoutes(team: TeamConfig): string {
   const entries = Object.entries(team.channels).map(([channel, route]) => {
     const value: ChannelRoute = { deskmate: route.deskmate };
     if (route.lock !== undefined) value.lock = route.lock;
+    if (route.watch !== undefined) value.watch = route.watch;
     return `  ${JSON.stringify(channel)}: ${JSON.stringify(value)},`;
   });
   return `${BANNER}
@@ -172,6 +174,22 @@ export function renderSubagentInstructions(roleInstructions: string, voice?: str
   const { houseStyle } = require("@deskmate/core/house-style") as { houseStyle: string };
   const voiceBlock = voice ? `\n\n## Your voice\n${voice}` : "";
   return `${roleInstructions.trimEnd()}\n\n${houseStyle.trimEnd()}${voiceBlock}\n`;
+}
+
+/**
+ * `agent/schedules/deskmate-sweep.ts` — the Phase-2 scheduled sweep. Emitted only
+ * when a channel opts into `watch.digest` (see plan.ts). One team-level cron.
+ */
+export function renderDeskmateSweepSchedule(team: TeamConfig): string {
+  const cron = team.sweep?.cron ?? DEFAULT_SWEEP_CRON;
+  return `${BANNER}
+import { createDeskmateSweep } from "@deskmate/core";
+import { DESKMATES } from "../lib/deskmates.js";
+import { CHANNEL_ROUTES } from "../lib/channel-routes.js";
+import slack from "../channels/slack.js";
+
+export default createDeskmateSweep(DESKMATES, CHANNEL_ROUTES, { cron: ${JSON.stringify(cron)}, slack });
+`;
 }
 
 /**

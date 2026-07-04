@@ -16,6 +16,17 @@ export {
   type SlackSenderIdentity,
 } from "./deskmate-identity.js";
 
-export { resolveRoute, type ChannelRoute, type ResolvedRoute } from "./channel-routes.js";
+export {
+  resolveRoute,
+  resolveWatch,
+  watchDisabled,
+  DEFAULT_REACTION_PALETTE,
+  type ChannelRoute,
+  type ResolvedRoute,
+  type ChannelWatch,
+  type EffectiveWatch,
+} from "./channel-routes.js";
 
 export { nextConveneDecision, maxTurns, type ConveneState } from "./convene.js";
+
+export { createDeskmateSweep, sweepTargets, DEFAULT_SWEEP_CRON, type SweepTarget } from "./schedules/deskmate-sweep.js";
