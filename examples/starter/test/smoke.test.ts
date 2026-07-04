@@ -59,6 +59,19 @@ describe("generated agent/** tree matches deskmate.config.ts", () => {
     }
   });
 
+  it("generates the memory tree for the memory-enabled deskmate (product_analyst)", () => {
+    // product_analyst has `memory: true` in the config; the other deskmate does not.
+    expect(exists("subagents", "product_analyst", "instructions", "memory.ts")).toBe(true);
+    for (const tool of ["remember", "recall", "forget"]) {
+      expect(exists("subagents", "product_analyst", "tools", `${tool}.ts`)).toBe(true);
+    }
+    // The nightly reflection schedule is root-only and emitted once.
+    expect(exists("schedules", "memory-reflection.ts")).toBe(true);
+    // A deskmate without `memory` gets no memory shims.
+    expect(exists("subagents", "devops", "tools", "remember.ts")).toBe(false);
+    expect(exists("subagents", "devops", "instructions", "memory.ts")).toBe(false);
+  });
+
   it("spot-checks the paths called out in the task", () => {
     expect(exists("subagents", "devops", "agent.ts")).toBe(true);
     expect(exists("subagents", "product_analyst", "agent.ts")).toBe(true);

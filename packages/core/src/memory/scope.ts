@@ -4,18 +4,17 @@ import type { MemoryScope } from "./types.js";
  * Executor-derived scope. `deskmateId` is fixed at codegen; `workspace` comes
  * from `ctx`, never the model.
  *
- * NOTE: the exact `ctx` path for the Slack workspace/team id is PROVISIONAL and
- * must be confirmed against eve's Slack channel metadata during integration
- * (Task 11). eve's base `SessionContext` (eve 0.19.0) exposes
- * `ctx.session.auth.current.attributes` (a `Record<string, string | string[]>`)
- * but no top-level `ctx.channel`; the `ctx.channel.metadata.teamId` path below
- * is the anticipated Slack shape. The two fallback paths encoded here are the
- * current contract the tests rely on.
+ * Confirmed against eve 0.19.0 (Task 11): a tool/instructions executor receives
+ * a `SessionContext`, which has NO top-level `ctx.channel` — the Slack
+ * workspace/team id lives on the session auth attributes. eve's default Slack
+ * mention/DM auth (`buildSlackAuthContext`) writes `attributes.team_id`
+ * (snake_case); Deskmate's proactive ambient channel (channels/slack-ambient.ts)
+ * writes `attributes.teamId` (camelCase). We read both, then fall back to
+ * `workspaceId` for any non-Slack surface. All are optional, so a workspace-less
+ * surface simply scopes memory by deskmate id alone.
  */
 export function resolveScope(deskmateId: string, ctx: any): MemoryScope {
-  const workspace =
-    ctx?.channel?.metadata?.teamId ??
-    ctx?.session?.auth?.current?.attributes?.workspaceId ??
-    undefined;
+  const attrs = ctx?.session?.auth?.current?.attributes;
+  const workspace = attrs?.team_id ?? attrs?.teamId ?? attrs?.workspaceId ?? undefined;
   return { deskmate: deskmateId, workspace: typeof workspace === "string" ? workspace : undefined };
 }

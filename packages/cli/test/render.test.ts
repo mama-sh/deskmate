@@ -235,6 +235,24 @@ describe("renderEnvExample", () => {
     const out = renderEnvExample(fixtureTeam);
     expect(out).not.toContain("DESKMATE_MAX_TURNS");
   });
+
+  it("omits DATABASE_URL when no deskmate opts into memory", () => {
+    const out = renderEnvExample(fixtureTeam);
+    expect(out).not.toContain("DATABASE_URL");
+  });
+
+  it("surfaces DATABASE_URL (commented) when a deskmate opts into memory", () => {
+    const withMemory = {
+      ...fixtureTeam,
+      deskmates: {
+        ...fixtureTeam.deskmates,
+        product_analyst: { ...fixtureTeam.deskmates.product_analyst, memory: { maxItems: 200, coreLimit: 25 } },
+      },
+    } as unknown as TeamConfig;
+    const out = renderEnvExample(withMemory);
+    expect(out).toContain("# DATABASE_URL=postgres://...");
+    expect(out).toContain("ephemeral in-memory");
+  });
 });
 
 describe("renderDeskmateSweepSchedule", () => {

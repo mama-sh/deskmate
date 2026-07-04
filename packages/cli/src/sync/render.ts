@@ -309,5 +309,16 @@ SLACK_CONNECTOR=slack/deskmate
     .map(([name, c]) => `# ${name}\n${c.env}_MCP_URL=\n${c.env}_MCP_TOKEN=`);
 
   const body = blocks.length ? `\n\n${blocks.join("\n\n")}` : "";
-  return `${preamble}${body}\n`;
+
+  // Only surface DATABASE_URL when ≥1 deskmate opts into memory — the store falls
+  // back to an ephemeral in-memory adapter without it, so it's noise otherwise.
+  const anyMemory = Object.values(team.deskmates).some((d) => d.memory);
+  const memory = anyMemory
+    ? `\n\n# ── Deskmate memory (cross-thread recall) ─────────────────────────────────
+# Persist deskmate memory across threads. Unset = ephemeral in-memory (dev only).
+# Provision a Postgres via the Vercel Marketplace (Neon) and paste its URL here.
+# DATABASE_URL=postgres://...`
+    : "";
+
+  return `${preamble}${body}${memory}\n`;
 }
