@@ -112,10 +112,9 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
     // instructions.md — authored role instructions composed with core's shared
     // house-style block (voice + work discipline) + the deskmate's optional `voice`.
     const instrPath = join(cwd, "roles", role, "instructions.md");
-    const roleInstructions = existsSync(instrPath)
-      ? readFileSync(instrPath, "utf8")
-      : missingInstructions(id, role);
-    if (!existsSync(instrPath)) {
+    const hasInstructions = existsSync(instrPath);
+    const roleInstructions = hasInstructions ? readFileSync(instrPath, "utf8") : missingInstructions(id, role);
+    if (!hasInstructions) {
       warnings.push(`deskmate "${id}": no authored roles/${role}/instructions.md — wrote a TODO placeholder.`);
     }
     out(`agent/subagents/${id}/instructions.md`, renderSubagentInstructions(roleInstructions, d.voice));
