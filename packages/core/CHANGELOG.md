@@ -1,0 +1,29 @@
+# Changelog
+
+## 0.1.0 (2026-07-04)
+
+
+### Features
+
+* **core:** add optional per-deskmate voice field ([d774440](https://github.com/mama-sh/deskmate/commit/d774440119bcd48702a70f2c6434869bd9a3c75c))
+* **core:** add optional watch block to ChannelRoute ([94e5e1e](https://github.com/mama-sh/deskmate/commit/94e5e1e1eab99379b5fd04f1eb7107fa5213b67f))
+* **core:** add shared house-style voice + work block ([da394e7](https://github.com/mama-sh/deskmate/commit/da394e7889dad6c8296b5929eb5ef50dffc954d6))
+* **core:** clampVerdict guardrail for the watch gate ([53a1e99](https://github.com/mama-sh/deskmate/commit/53a1e99ade2b4d7e186767a651950461bb6075da))
+* **core:** classifyEvent LLM action selector (injectable, fails closed) ([d6296a5](https://github.com/mama-sh/deskmate/commit/d6296a5d6361ffe3b52c55f8a7fc0d4ede565bfe))
+* **core:** createDeskmateSweep schedule factory ([4514b3f](https://github.com/mama-sh/deskmate/commit/4514b3f73a5df4f4878d87ad738f900bcb5451ea))
+* **core:** front-desk follow-up continuity + human voice note ([29f3f8f](https://github.com/mama-sh/deskmate/commit/29f3f8f0911a14fc1a0adb39cfa21d07853aa56b))
+* **core:** generalize the ambient channel into the two-tier watcher ([fe6a03a](https://github.com/mama-sh/deskmate/commit/fe6a03a68c9c86563def68117794b76245cdbe72))
+* **core:** resolveWatch effective settings + env overrides ([d048169](https://github.com/mama-sh/deskmate/commit/d048169cb22e46bd008608ec7fb7c8bd1f377dae))
+* **core:** Slack-derived reply-cooldown helpers ([82060c4](https://github.com/mama-sh/deskmate/commit/82060c4ffb191c97b4240475e0181dba5227294c))
+* **core:** validate the channel watch block in defineTeam ([29847f2](https://github.com/mama-sh/deskmate/commit/29847f2aee22d8e7ab870b46f46dcb92e98c873d))
+* deskmate voice + iteration-loop upgrade ([c2eb4d7](https://github.com/mama-sh/deskmate/commit/c2eb4d738e27e9517d80b44045e59261759f0ad3))
+* proactive channel watching (opt-in two-tier watcher + scheduled sweep) ([a9743cb](https://github.com/mama-sh/deskmate/commit/a9743cb4d488408e0631bd2777b35e35d07fb901))
+* **starter:** example deskmate voices + anti-slop guard; dedupe house-style header ([07e9ba1](https://github.com/mama-sh/deskmate/commit/07e9ba13c7dbfd56472ae8417599f466f35ce5ea))
+
+
+### Bug Fixes
+
+* **core,cli:** address Codex/Copilot review on the proactive watcher ([a5c59b6](https://github.com/mama-sh/deskmate/commit/a5c59b6b182eb8e7539d6125085552ee85dbf257))
+* **core,cli:** sweep respects watch.post; delimit untrusted watcher text; DRY sweep cron ([09abb31](https://github.com/mama-sh/deskmate/commit/09abb3162fccb2d6bea3ddca8b6711b6391fb4a8))
+* **core:** harden the watcher post cap + dispatch exhaustiveness ([798b329](https://github.com/mama-sh/deskmate/commit/798b329f1b612c587f6c3f66d47bdb307cf3ea15))
+* **core:** remove em dashes from the house-style block ([6f92762](https://github.com/mama-sh/deskmate/commit/6f92762a43c61ea84f61f5b8d38ecbd5ba0b1947))

@@ -1,11 +1,14 @@
 {
   "name": "@deskmate/cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "bin": {
     "deskmate": "./bin/deskmate.mjs"
   },
-  "files": ["dist", "bin"],
+  "files": [
+    "dist",
+    "bin"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mama-sh/deskmate.git",
