@@ -43,6 +43,7 @@ const TeamConfig = z.object({
   // frontDesk is omitted: zod v4's .default() returns the fallback value as-is
   // without re-parsing it, whereas .prefault() runs it through the schema.
   frontDesk: z.object({ maxTurns: z.number().int().positive().default(6) }).prefault({}),
+  sweep: z.object({ cron: z.string() }).optional(),
   connections: z.record(z.string(), ConnectionConfig).default({}),
   deskmates: z.record(z.string(), DeskmateConfig).default({}),
   channels: z.record(z.string(), ChannelRoute).default({}),
