@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.2.0](https://github.com/mama-sh/deskmate/compare/v0.1.0...v0.2.0) (2026-07-04)
+
+
+### Features
+
+* **catalog:** relocate the 5 library roles + their tool-logic tests ([7a6e5a1](https://github.com/mama-sh/deskmate/commit/7a6e5a12bfcc9e379d0e976e90aad59f9726cad9))
+* **cli:** deskmate add scaffolds editable role + appends config entry ([3927939](https://github.com/mama-sh/deskmate/commit/3927939ff57f755e74fdcc420c28e46b31643d5f))
+* **cli:** deskmate sync generates the agent/ tree from config ([25edafd](https://github.com/mama-sh/deskmate/commit/25edafd822b696dda9cdf9803222b44b8f259257))
+* **cli:** sync copies deskmate skills into the generated tree ([40b3166](https://github.com/mama-sh/deskmate/commit/40b3166225ba911bc8b539bbb45b6933bba24097))
+* **core:** defineDeskmate builds routing description from config ([9ba8fd1](https://github.com/mama-sh/deskmate/commit/9ba8fd14561c036a9a33a9ccb1d21659190ee909))
+* **core:** defineTeam config schema + cross-reference validation ([adc38f5](https://github.com/mama-sh/deskmate/commit/adc38f5dd2cea32ceadea5c130824c5df28e95ed))
+* **core:** relocate engine into @deskmate/core, roster-parameterized identity ([32b7558](https://github.com/mama-sh/deskmate/commit/32b7558dba033324e4599509fd2e1b8db5d933ac))
+* **example:** config-driven starter app; remove legacy root agent ([d55fdc2](https://github.com/mama-sh/deskmate/commit/d55fdc24374e1248a5041058db79ecf3683e40bf))
+
+
+### Bug Fixes
+
+* activate channel routing + full sync cleanup + review cleanups ([c4da691](https://github.com/mama-sh/deskmate/commit/c4da69120a407aebb2f625a0b0aa9daeac53a841))
+* add seeds connections; sync reads roles/&lt;role&gt;; safe stub env access; mcp-add prefix guard ([4898d8f](https://github.com/mama-sh/deskmate/commit/4898d8f23ad2d8b79ada4e4c3bc6bcf6a5532272))
+* byte-exact skill copies; cross-platform package builds ([f53c3bc](https://github.com/mama-sh/deskmate/commit/f53c3bc071947d112dbea216ca0772c8a7b4b213))
+* **cli:** committed bin stub so the deskmate bin links at install ([242a027](https://github.com/mama-sh/deskmate/commit/242a027f213d2635bc1d310cd7201ef8728c19b9))
+* **cli:** externalize @deskmate/core in generated agent build config ([523cc5a](https://github.com/mama-sh/deskmate/commit/523cc5a2481dea27826c1ae4a5dbda4081cb2431))
+* **cli:** top-level error handler prints message, not a stack trace ([3c1adc4](https://github.com/mama-sh/deskmate/commit/3c1adc44021992e6bb75517cfa5211ecc3364177))
+* guard CLI ids before fs ops; depth-aware config-key check ([8645b24](https://github.com/mama-sh/deskmate/commit/8645b24d83096f5b872d5e7ab9d25db4862337b3))
+* guard role charset; mcp-add no clobber; drop maxTurns from env.example; real root typecheck ([eb0d3da](https://github.com/mama-sh/deskmate/commit/eb0d3da3cc9c380e8caad1a6da23dd1833d7e5c6))
+* honor frontDesk.maxTurns; validate synced config; README deps; neutral edit message ([ef5d2c6](https://github.com/mama-sh/deskmate/commit/ef5d2c6ddb3a7663fa96445c87316b452c99d8a7))
+* normalize team in defineDeskmate; typecheck test files ([a0219b6](https://github.com/mama-sh/deskmate/commit/a0219b6cd4b6ea260730cd64f3f7f5542fbb4abb))
+
 ## 0.1.0 (2026-07-02)
 
 
