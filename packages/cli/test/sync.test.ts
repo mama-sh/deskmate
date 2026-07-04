@@ -14,7 +14,7 @@ import { syncCommand } from "../src/sync/index.js";
 // `mod.default` and passes it to the pure planner.
 
 const CONFIG = `export default {
-  model: "anthropic/claude-sonnet-4.6",
+  model: "anthropic/claude-sonnet-5",
   frontDesk: { maxTurns: 6 },
   connections: {},
   deskmates: {

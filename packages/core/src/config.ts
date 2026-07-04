@@ -38,7 +38,7 @@ const ChannelRoute = z.object({
 });
 
 const TeamConfig = z.object({
-  model: z.string().default("anthropic/claude-sonnet-4.6"),
+  model: z.string().default("anthropic/claude-sonnet-5"),
   // .prefault({}) (not .default({})) so the inner maxTurns default is applied when
   // frontDesk is omitted: zod v4's .default() returns the fallback value as-is
   // without re-parsing it, whereas .prefault() runs it through the schema.

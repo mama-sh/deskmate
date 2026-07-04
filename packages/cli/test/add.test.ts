@@ -14,7 +14,7 @@ import { add, entryFromRole } from "../src/add.js";
 const MINIMAL_CONFIG = `import { defineTeam } from "@deskmate/core";
 
 export default defineTeam({
-  model: "anthropic/claude-sonnet-4.6",
+  model: "anthropic/claude-sonnet-5",
   connections: {},
   deskmates: {},
   channels: {},
