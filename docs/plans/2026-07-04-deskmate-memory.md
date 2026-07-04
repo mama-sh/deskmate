@@ -892,3 +892,17 @@ git add -A && git commit -m "test: verify deskmate memory end-to-end"
 - **DRY:** `applyPut` is the single source of dedupe/eviction truth — the in-memory adapter, Neon adapter, and `applyOps` all route through it.
 - **YAGNI:** no vector search, no per-user/per-channel scope, no memory UI. The pgvector path is documented, not built.
 - **Ordering:** Tasks 2 and 3 are mutually referential — create `score.ts` (Task 3 Step 3) before running Task 2's tests.
+- **Ordering (applied during execution):** Task 8 (Neon) was built before Task 5, because Task 5's `resolveMemoryStore` statically references `./adapters/neon.js` via `import()` and won't typecheck until that module exists.
+
+## Code-review follow-ups (from the Task 8 Neon review — non-blocking, tracked)
+
+The Neon adapter was **approved** (injection-safe on every query, optional dep verified in emitted `dist`, DRY via `applyPut`, scope-consistent with in-memory). Open follow-ups to address before this backend takes real concurrent write traffic:
+
+- **I1 (important, concurrency):** `put` is a client-side read-modify-write over two non-transactional HTTP statements. Two concurrent puts to the same `(workspace, deskmate)` scope can lose a write, because the snapshot-diff eviction `DELETE ... WHERE key NOT IN (my-snapshot)` erases the other writer's freshly-inserted row. Low probability for the single-writer-per-deskmate access pattern (a deskmate's tool calls in a turn run sequentially), but fix before concurrent writers. Fix options: wrap UPSERT+DELETE in the driver `transaction()` / `SELECT ... FOR UPDATE`; OR replace the snapshot-diff eviction with the self-contained `DELETE ... WHERE key IN (subquery ORDER BY score ASC OFFSET maxItems)`.
+- **M2 (minor):** a failed lazy `CREATE TABLE` memoizes the rejected promise, permanently bricking the store. Clear the memo on failure so the next call retries.
+- **M3 (minor, shared with in-memory adapter):** `put` returns `result.find(m => m.key === input.key)!`, which is `undefined` if the just-written low-importance item is immediately evicted from a full pool — violates `Promise<Memory>`. Fix in `applyPut`/both adapters (return the computed `next` regardless of eviction).
+- **M4 (optimization):** `put` re-UPSERTs the whole result set (≤200 rows) and always issues the eviction DELETE. Skip the DELETE when no eviction occurred; consider upserting only the changed row (interacts with M3, tread carefully).
+
+## Integration caveat (from Task 6)
+
+`resolveScope`'s workspace derivation uses `ctx.session.auth.current.attributes.workspaceId` (aligns with eve 0.19.0's real `SessionContext`) with a **speculative** `ctx.channel.metadata.teamId` primary path (NOT on the base `SessionContext` type). Confirm the real Slack workspace/team-id path against eve's Slack channel-event context during Task 11, and update `scope.ts` accordingly.
