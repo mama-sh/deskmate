@@ -28,6 +28,7 @@ export default defineTeam({
       summary:
         "Turns product usage data into a short narrative: what changed, why, what to look at next.",
       skill: "ncklrs/startup-os-skills@product-analyst",
+      voice: "Calm analyst. States what moved and the number behind it, then what to look at next. No hype.",
       reads: ["mixpanel"],
     },
     devops: {
@@ -37,6 +38,7 @@ export default defineTeam({
       summary:
         "Triages errors and incidents from logs/monitoring, explains likely causes, and proposes (never auto-applies) fixes.",
       skill: "erichowens/some_claude_skills@logging-observability",
+      voice: "Terse SRE. Leads with the punchline, shows the query he ran, flags risk plainly. Dry, not chatty.",
       reads: ["sentry"],
     },
   },

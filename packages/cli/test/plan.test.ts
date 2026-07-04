@@ -141,7 +141,7 @@ describe("planSync", () => {
     expect(text.startsWith(authored.trimEnd())).toBe(true);
     // …then core's shared house-style block is appended.
     expect(text).toContain("## How you write");
-    expect(text).toContain("## How you work");
+    expect(text).toContain("## Grounding and clarifying");
   });
 
   it("copies the deskmate's skills tree verbatim, preserving nested dirs", () => {

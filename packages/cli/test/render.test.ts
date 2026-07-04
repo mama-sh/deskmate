@@ -184,7 +184,7 @@ describe("renderSubagentInstructions", () => {
     expect(out.startsWith("# Role: DevOps")).toBe(true);
     expect(out).toContain("Authored, verbatim.");
     expect(out).toContain("## How you write");
-    expect(out).toContain("## How you work");
+    expect(out).toContain("## Grounding and clarifying");
   });
 
   it("adds a voice section only when a voice line is given", () => {
