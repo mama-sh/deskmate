@@ -4,6 +4,7 @@ import { remove } from "./remove.js";
 import { list } from "./list.js";
 import { mcpAdd } from "./mcp-add.js";
 import { syncCommand } from "./sync/index.js";
+import { dev } from "./dev.js";
 
 const USAGE = [
   "usage:",
@@ -12,6 +13,7 @@ const USAGE = [
   "  deskmate list             list the catalog roles",
   "  deskmate mcp-add <name>   scaffold a read-only MCP connection into ./connections",
   "  deskmate sync             regenerate the agent/** tree from deskmate.config.ts",
+  "  deskmate dev              sync + eve dev with live re-sync on config edits",
 ].join("\n");
 
 const [command, ...rest] = process.argv.slice(2);
@@ -36,6 +38,9 @@ try {
       break;
     case "sync":
       await syncCommand();
+      break;
+    case "dev":
+      process.exitCode = await dev(rest);
       break;
     default:
       console.log(USAGE);
