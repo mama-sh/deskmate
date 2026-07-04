@@ -16,7 +16,26 @@ const DeskmateConfig = z.object({
   voice: z.string().optional(), // one line of persona/register, injected under the shared house style
 });
 
-const ChannelRoute = z.object({ deskmate: z.string(), lock: z.boolean().optional() });
+const ChannelWatch = z.object({
+  react: z.boolean().default(true),
+  reply: z.boolean().default(true),
+  post: z.boolean().default(false),
+  approvePosts: z.boolean().default(false),
+  picker: z.enum(["routed", "frontdesk"]).default("routed"),
+  reactionPalette: z.array(z.string()).nonempty().optional(),
+  digest: z.boolean().optional(),
+});
+
+// `watch` is `.optional()` (NOT `.default({})`): an omitted `watch` means "not
+// watched" and stays undefined, while a present `watch` (even `{}`) is re-parsed so
+// the inner `.default()`s fill in. zod v4's `.default({})` would return the literal
+// `{}` without re-parsing, skipping those inner defaults: the same gotcha the
+// `frontDesk` field above documents with `.prefault({})`.
+const ChannelRoute = z.object({
+  deskmate: z.string(),
+  lock: z.boolean().optional(),
+  watch: ChannelWatch.optional(),
+});
 
 const TeamConfig = z.object({
   model: z.string().default("anthropic/claude-sonnet-4.6"),
