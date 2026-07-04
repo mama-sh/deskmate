@@ -3,9 +3,9 @@
   "version": "0.0.0",
   "type": "module",
   "bin": {
-    "deskmate": "./dist/cli.js"
+    "deskmate": "./bin/deskmate.mjs"
   },
-  "files": ["dist"],
+  "files": ["dist", "bin"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/postbuild.mjs",
     "prepack": "pnpm -w run build:packages",
