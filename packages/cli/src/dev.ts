@@ -53,13 +53,33 @@ export async function dev(
 
   const child = deps.spawnEve(eveBin, ["dev", ...args], cwd);
 
-  // Watch config + roles/**; re-sync quietly on change. A broken save warns but
-  // does NOT kill eve — fix and save again.
-  const watcher = deps.watchConfig(cwd, () => {
-    deps.sync(cwd, { quiet: true }).catch((err: unknown) => {
-      console.error(`⚠ re-sync failed: ${err instanceof Error ? err.message : String(err)}`);
-    });
-  });
+  // Watch config + roles/**; re-sync quietly on change. Serialize: a sync can outlast
+  // the debounce window, and two concurrent `syncCommand` runs would interleave the
+  // rm/write on `agent/**` and briefly corrupt the tree. So run at most one at a time
+  // and coalesce edits that land mid-sync into a single follow-up. A broken save warns
+  // but does NOT kill eve — fix and save again.
+  let syncing = false;
+  let queued = false;
+  const resync = () => {
+    if (syncing) {
+      queued = true;
+      return;
+    }
+    syncing = true;
+    deps
+      .sync(cwd, { quiet: true })
+      .catch((err: unknown) => {
+        console.error(`⚠ re-sync failed: ${err instanceof Error ? err.message : String(err)}`);
+      })
+      .finally(() => {
+        syncing = false;
+        if (queued) {
+          queued = false;
+          resync();
+        }
+      });
+  };
+  const watcher = deps.watchConfig(cwd, resync);
 
   // Ctrl+C / termination: forward to eve so it tears down cleanly.
   const forward = (sig: NodeJS.Signals) => child.kill(sig);
@@ -96,9 +116,18 @@ function watchConfigDefault(cwd: string, onChange: () => void): { close: () => v
   ];
   // `sync` tolerates a config-only project (deskmates declared but no authored
   // `roles/` on disk — it writes TODO placeholders), so `dev` must too. Watching a
-  // nonexistent `roles/` would throw ENOENT synchronously and orphan the spawned eve.
+  // nonexistent `roles/` would throw ENOENT synchronously, and recursive `fs.watch`
+  // can also throw on some platforms/filesystems (EMFILE, unsupported recursive). If
+  // it throws here it would escape past the already-spawned eve and orphan it — so
+  // degrade to config-only live-reload instead (the config watcher above still fires).
   if (existsSync(join(cwd, "roles"))) {
-    watchers.push(fsWatch(join(cwd, "roles"), { recursive: true }, debounced));
+    try {
+      watchers.push(fsWatch(join(cwd, "roles"), { recursive: true }, debounced));
+    } catch (err: unknown) {
+      console.error(
+        `⚠ roles/ live-reload disabled (watch failed): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
   return {
     close: () => {

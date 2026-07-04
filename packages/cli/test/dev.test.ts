@@ -87,6 +87,39 @@ describe("dev", () => {
     warn.mockRestore();
   });
 
+  it("serializes re-syncs, coalescing edits during an in-flight sync into one follow-up", async () => {
+    // A sync can outlast the debounce window; two concurrent syncCommand runs would
+    // interleave rm/write on agent/** and corrupt the tree. Prove only one runs at a
+    // time and that N edits during an in-flight sync collapse to a single follow-up.
+    const releases: Array<() => void> = [];
+    let quietRuns = 0;
+    const sync = vi.fn(async (_cwd: string, opts?: { quiet?: boolean }) => {
+      if (!opts?.quiet) return; // initial sync resolves immediately
+      quietRuns++;
+      await new Promise<void>((resolve) => releases.push(resolve)); // hang until released
+    });
+    // Drain all pending microtasks (the sync→catch→finally→resync chain spans several).
+    const flush = () => new Promise<void>((r) => setTimeout(r, 0));
+    const { deps, emitExit, triggerChange } = makeDeps({ sync });
+    const p = dev([], "/proj", deps);
+    await flush(); // initial sync + spawn settle
+
+    triggerChange(); // starts quiet re-sync #1 (in-flight/hung)
+    await flush();
+    triggerChange(); // in-flight → queued, must NOT start a 2nd concurrent run
+    triggerChange(); // still just queued (coalesced)
+    await flush();
+    expect(quietRuns).toBe(1); // one running despite three edits
+
+    releases[0]!(); // finish re-sync #1 → exactly one coalesced follow-up runs
+    await flush();
+    expect(quietRuns).toBe(2); // a single follow-up, not two
+
+    releases[1]?.(); // let the follow-up finish so dev can exit cleanly
+    emitExit(0);
+    await p;
+  });
+
   it("fails fast (no spawn) when the initial sync throws", async () => {
     const sync = vi.fn().mockRejectedValueOnce(new Error("bad config"));
     const { deps } = makeDeps({ sync });
