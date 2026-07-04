@@ -116,8 +116,19 @@ Every catalog read tool ships with **seed data**, so a fresh project runs and de
 with zero external infrastructure. Point a deskmate at real data by setting its MCP
 connection env vars (see the generated `.env.example`).
 
-Test agent logic locally over the HTTP session endpoint (Slack itself can't reach
-localhost — see Caveats):
+Test your team locally — `deskmate dev` regenerates the agent tree from
+`deskmate.config.ts` and opens a local chat with the front desk + deskmates,
+re-syncing automatically as you edit the config so changes go live without a
+restart (Slack itself can't reach localhost — see Caveats):
+
+```bash
+deskmate dev   # deskmate sync + eve dev; edits to deskmate.config.ts reload live
+```
+
+Under the hood that's `deskmate sync` then `eve dev` (local TUI + HTTP session
+endpoint; pick a model with `/model`). Point it at a deployment with
+`deskmate dev https://your-app.vercel.app`, or drop to the lower-level `eve dev`
+directly:
 
 ```bash
 eve dev   # local TUI + HTTP session endpoint; pick a model with /model
@@ -392,7 +403,7 @@ checklist by hand after enabling watching:
 - **Vercel-only today.** Eve's durable runtime is Vercel-only ("other platforms coming
   soon") — self-hosting means hosting on *your own* Vercel account.
 - **Slack can't be tested on localhost.** Slack delivers to the deployed project via
-  Connect. Test agent logic locally over the HTTP session endpoint (`eve dev`).
+  Connect. Test agent logic locally with `deskmate dev` (which runs `eve dev`).
 - **Single-deployment, env-token auth.** One organization per deployment; MCP credentials
   live in env vars. Per-org tenancy is intentionally out of scope (see Scope).
 - **One shared Slack identity.** This Eve version doesn't expose a per-reply name/icon, so
