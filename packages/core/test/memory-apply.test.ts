@@ -29,4 +29,10 @@ describe("applyPut", () => {
     const out = applyPut([keep, drop], { key: "c", value: "v", importance: 5 }, { maxItems: 2, now: NOW });
     expect(out.map((m) => m.key).sort()).toEqual(["c", "keep"]);
   });
+  it("always retains the just-written memory even when it is the lowest-scored", () => {
+    // Full pool (maxItems: 1) holding one high-importance item; write a NEW low-importance key.
+    const existing = mk({ key: "hi", importance: 10 });
+    const out = applyPut([existing], { key: "new_low", value: "v", importance: 1 }, { maxItems: 1, now: NOW });
+    expect(out.map((m) => m.key)).toEqual(["new_low"]); // the new key is retained, the old one evicted
+  });
 });

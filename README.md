@@ -281,7 +281,7 @@ product_analyst: {
 The model borrows the usual memory vocabulary: **working / core / recall / archival** tiers
 holding **episodic** memories (dated events) and **semantic** ones (durable facts). Each
 turn, the deskmate's highest-scored **core** memories are pinned into context automatically
-(scored by importance × recency), so it starts already knowing what matters. Three tools
+(ranked by importance plus a recency boost), so it starts already knowing what matters. Three tools
 handle the rest: **`remember`** writes one fact under a stable key, **`recall`** searches
 its archive, and **`forget`** deletes one — and because `forget` is `approval: always()`,
 it pauses for a human before anything is removed.

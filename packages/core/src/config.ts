@@ -56,7 +56,8 @@ const TeamConfig = z.object({
   // without re-parsing it, whereas .prefault() runs it through the schema.
   frontDesk: z.object({ maxTurns: z.number().int().positive().default(6) }).prefault({}),
   sweep: z.object({ cron: z.string() }).optional(),
-  // Team-level memory knob (accepted but unwired until a later task adds reflection).
+  // Team-level memory knob. `memory.reflect.cron` is consumed by `deskmate sync`, which
+  // renders the nightly reflection ("dreaming") schedule's cron from it.
   memory: z.object({ reflect: z.object({ cron: z.string() }).optional() }).optional(),
   connections: z.record(z.string(), ConnectionConfig).default({}),
   deskmates: z.record(z.string(), DeskmateConfig).default({}),

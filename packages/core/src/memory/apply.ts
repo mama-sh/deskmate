@@ -20,10 +20,13 @@ export function applyPut(
     createdAt: existing?.createdAt ?? iso,
     updatedAt: iso,
   };
-  const merged = [...items.filter((m) => m.key !== input.key), next];
+  const others = items.filter((m) => m.key !== input.key);
+  const merged = [...others, next];
   if (merged.length <= opts.maxItems) return merged;
-  // Forgetting: keep the highest-scored up to the cap.
-  return [...merged]
+  // Forgetting: ALWAYS keep the just-written memory; evict the lowest-scored of the rest.
+  // (Sorting all of `merged` could drop `next`, breaking adapters' `find(input.key)!`.)
+  const keptOthers = [...others]
     .sort((a, b) => scoreMemory(b, opts.now) - scoreMemory(a, opts.now))
-    .slice(0, opts.maxItems);
+    .slice(0, opts.maxItems - 1);
+  return [...keptOthers, next];
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { applyOps, reflectScope, type ReflectionOp } from "../src/memory/reflect.js";
+import { buildReflectionPrompt } from "../src/memory/schedule.js";
 import { createInMemoryStore } from "../src/memory/adapters/in-memory.js";
 import type { Memory } from "../src/memory/types.js";
 
@@ -30,6 +31,29 @@ describe("applyOps (additive, conservative)", () => {
     const out = applyOps(items, ops, { maxItems: 200, now: NOW });
     expect(out.some((m) => m.key === "e1")).toBe(true);
     expect(out.find((m) => m.key === "e1")?.kind).toBe("episodic");
+  });
+});
+
+describe("buildReflectionPrompt (bounded prompt size)", () => {
+  it("serializes at most 50 memories out of 60", () => {
+    const memories: Memory[] = Array.from({ length: 60 }, (_, i) => ep(`e${i}`, `value ${i}`));
+    const prompt = buildReflectionPrompt(memories);
+    // Keys e0..e49 present; e50..e59 dropped.
+    expect(prompt).toContain('"e49"');
+    expect(prompt).not.toContain('"e50"');
+    // Count serialized keys directly from the JSON to be robust.
+    const serialized = JSON.parse(prompt.split("\n")[3]) as { key: string }[];
+    expect(serialized).toHaveLength(50);
+  });
+
+  it("truncates a long value and does not include the full 3000-char string", () => {
+    const full = "x".repeat(3000);
+    const prompt = buildReflectionPrompt([ep("big", full)]);
+    expect(prompt).not.toContain(full);
+    expect(prompt).toContain("…"); // truncation marker
+    const serialized = JSON.parse(prompt.split("\n")[3]) as { value: string }[];
+    expect(serialized[0].value.length).toBeLessThan(full.length);
+    expect(serialized[0].value.endsWith("…")).toBe(true);
   });
 });
 

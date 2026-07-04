@@ -3,6 +3,18 @@ import { always } from "eve/tools/approval";
 import { z } from "zod";
 import { resolveMemoryStore } from "./store.js";
 import { resolveScope } from "./scope.js";
+import type { Memory } from "./types.js";
+
+const POOL_CAP = 200; // matches the adapters' store cap; search the whole pool before limiting
+
+/** Pure: filter a memory pool by an optional substring query, then cap to `limit`. */
+export function searchMemories(pool: Memory[], query: string | undefined, limit: number): Memory[] {
+  if (!query) return pool.slice(0, limit);
+  const q = query.toLowerCase();
+  return pool
+    .filter((m) => m.value.toLowerCase().includes(q) || m.key.toLowerCase().includes(q))
+    .slice(0, limit);
+}
 
 /** The three long-term-memory tools, bound to one deskmate's scope. */
 export function createMemoryTools(deskmateId: string) {
@@ -28,10 +40,10 @@ export function createMemoryTools(deskmateId: string) {
     inputSchema: z.object({ query: z.string().optional(), limit: z.number().int().min(1).max(50).default(20) }),
     async execute({ query, limit }, ctx) {
       const store = await resolveMemoryStore();
-      const all = await store.list(resolveScope(deskmateId, ctx), { limit });
-      if (!query) return all;
-      const q = query.toLowerCase();
-      return all.filter((m) => m.value.toLowerCase().includes(q) || m.key.toLowerCase().includes(q));
+      // With a query, pull the whole bounded pool so the substring search isn't limited
+      // to the top page; without one, the top-`limit` by score is exactly what we want.
+      const pool = await store.list(resolveScope(deskmateId, ctx), { limit: query ? POOL_CAP : limit });
+      return searchMemories(pool, query, limit);
     },
   });
 

@@ -17,12 +17,24 @@ const OpsSchema = z.object({
   })).max(50),
 });
 
+// Bound the reflection prompt so it can't blow the model's context/cost: a full pool is up
+// to 200 memories × 2000 chars each. We cap the count and truncate each value. The input is
+// already score-ordered (from store.list), so slicing keeps the most relevant memories.
+const REFLECT_MAX_ITEMS = 50;
+const REFLECT_VALUE_CHARS = 500;
+
+const truncateValue = (value: string): string =>
+  value.length > REFLECT_VALUE_CHARS ? value.slice(0, REFLECT_VALUE_CHARS) + "…" : value;
+
 export function buildReflectionPrompt(memories: Memory[]): string {
+  const bounded = memories
+    .slice(0, REFLECT_MAX_ITEMS)
+    .map(({ key, value, kind, importance }) => ({ key, value: truncateValue(value), kind, importance }));
   return [
     "You are consolidating one AI coworker's long-term memory during idle time ('dreaming').",
     "Below are its current memories as JSON (kind: 'episodic' = a raw event; 'semantic' = a durable fact).",
     "",
-    JSON.stringify(memories.map(({ key, value, kind, importance }) => ({ key, value, kind, importance }))),
+    JSON.stringify(bounded),
     "",
     "Propose a SMALL set of CONSERVATIVE, high-confidence consolidation operations:",
     "- add: a new SEMANTIC fact synthesized from one or more episodic events (use a fresh snake_case key).",

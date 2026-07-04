@@ -60,23 +60,32 @@ export function createNeonStore(connectionString: string): MemoryStore {
   let ready: Promise<Sql> | undefined;
 
   // Memoized so the CREATE TABLE runs at most once per store, even under concurrent calls.
-  const getSql = (): Promise<Sql> =>
-    (ready ??= (async () => {
-      const { neon } = await import("@neondatabase/serverless");
-      const sql = neon(connectionString);
-      await sql`CREATE TABLE IF NOT EXISTS memories (
-        workspace text not null default '_',
-        deskmate text not null,
-        key text not null,
-        value text not null,
-        kind text not null,
-        importance int not null,
-        created_at timestamptz not null,
-        updated_at timestamptz not null,
-        primary key (workspace, deskmate, key)
-      )`;
-      return sql;
-    })());
+  // A FAILED init clears the memo so the next call retries — otherwise a single transient
+  // failure (rejected promise) would be cached forever and permanently brick the store.
+  const getSql = (): Promise<Sql> => {
+    if (!ready) {
+      ready = (async () => {
+        const { neon } = await import("@neondatabase/serverless");
+        const sql = neon(connectionString);
+        await sql`CREATE TABLE IF NOT EXISTS memories (
+          workspace text not null default '_',
+          deskmate text not null,
+          key text not null,
+          value text not null,
+          kind text not null,
+          importance int not null,
+          created_at timestamptz not null,
+          updated_at timestamptz not null,
+          primary key (workspace, deskmate, key)
+        )`;
+        return sql;
+      })().catch((e) => {
+        ready = undefined; // failed init retries on the next call
+        throw e;
+      });
+    }
+    return ready;
+  };
 
   const fetchScope = async (sql: Sql, scope: MemoryScope): Promise<Memory[]> => {
     const rows = (await sql`
@@ -99,52 +108,55 @@ export function createNeonStore(connectionString: string): MemoryStore {
 
     async put(scope, input: MemoryInput) {
       const sql = await getSql();
-      const current = await fetchScope(sql, scope);
-      const result = applyPut(current, input, { maxItems: MAX, now: Date.now() });
+      const now = Date.now();
 
-      // Reconcile the DB to match `result`.
-      // UPSERT every result row in a single round-trip. The $N placeholders are
-      // generated from loop indices (never user data); all values are bound
-      // parameters, so this is injection-safe.
-      const COLS = 8;
-      const params: unknown[] = [];
-      const tuples = result.map((m, i) => {
-        const r = memoryToRow(scope, m);
-        params.push(
-          r.workspace,
-          r.deskmate,
-          r.key,
-          r.value,
-          r.kind,
-          r.importance,
-          r.created_at,
-          r.updated_at,
-        );
-        const b = i * COLS;
-        return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8})`;
-      });
+      // 1. Fetch ONLY the existing row for this key (if any) — not the whole scope.
+      const existingRows = (await sql.query(
+        `SELECT workspace, deskmate, key, value, kind, importance, created_at, updated_at
+         FROM memories
+         WHERE workspace = $1 AND deskmate = $2 AND key = $3`,
+        [ws(scope), scope.deskmate, input.key],
+      )) as unknown as MemoryRow[];
+
+      // 2. Normalize the new row via applyPut over just that one existing row — reusing its
+      //    createdAt-preservation, importance clamp, and kind default. With ≤ maxItems inputs
+      //    no eviction happens here, so the result always contains input.key.
+      const normalized = applyPut(existingRows.map(rowToMemory), input, { maxItems: MAX, now }).find(
+        (m) => m.key === input.key,
+      )!;
+      const r = memoryToRow(scope, normalized);
+
+      // 3. UPSERT the single normalized row. All values are bound parameters (injection-safe).
       await sql.query(
         `INSERT INTO memories (workspace, deskmate, key, value, kind, importance, created_at, updated_at)
-         VALUES ${tuples.join(", ")}
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (workspace, deskmate, key) DO UPDATE SET
            value = EXCLUDED.value,
            kind = EXCLUDED.kind,
            importance = EXCLUDED.importance,
            created_at = EXCLUDED.created_at,
            updated_at = EXCLUDED.updated_at`,
-        params,
+        [r.workspace, r.deskmate, r.key, r.value, r.kind, r.importance, r.created_at, r.updated_at],
       );
 
-      // DELETE any rows for this scope whose key is no longer present (evictions).
-      // `result` always contains `input.key`, so the key list is non-empty.
-      const keys = result.map((m) => m.key);
+      // 4. Self-contained eviction: keep the top-MAX by a score expression that mirrors
+      //    scoreMemory (importance + RECENCY_WEIGHT/(1+ageDays), RECENCY_WEIGHT=5, ageDays in
+      //    days) so Neon eviction matches the in-memory adapter, and delete the rest. It runs
+      //    entirely against the LIVE table in one statement (no pre-write snapshot), so it can
+      //    never delete a concurrent writer's row that legitimately ranks in the top-MAX.
       await sql.query(
         `DELETE FROM memories
-         WHERE workspace = $1 AND deskmate = $2 AND NOT (key = ANY($3::text[]))`,
-        [ws(scope), scope.deskmate, keys],
+         WHERE workspace = $1 AND deskmate = $2
+           AND key NOT IN (
+             SELECT key FROM memories
+             WHERE workspace = $1 AND deskmate = $2
+             ORDER BY (importance + 5.0 / (1 + EXTRACT(EPOCH FROM (NOW() - updated_at)) / 86400.0)) DESC
+             LIMIT $3
+           )`,
+        [ws(scope), scope.deskmate, MAX],
       );
 
-      return result.find((m) => m.key === input.key)!;
+      return normalized;
     },
 
     async delete(scope, key) {
