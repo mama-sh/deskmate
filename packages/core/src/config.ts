@@ -5,6 +5,11 @@ const ConnectionConfig = z.object({
   env: z.string().optional(),      // env prefix → <ENV>_MCP_URL/_TOKEN
 });
 
+const MemorySetting = z.object({
+  maxItems: z.number().int().positive().default(200),
+  coreLimit: z.number().int().positive().default(25),
+});
+
 const DeskmateConfig = z.object({
   role: z.string(),
   emoji: z.string(),
@@ -14,6 +19,13 @@ const DeskmateConfig = z.object({
   model: z.string().optional(),
   skill: z.string().optional(),
   voice: z.string().optional(), // one line of persona/register, injected under the shared house style
+  // Opt-in cross-thread memory. `true` normalizes to the MemorySetting defaults;
+  // `false`/omitted stay off (undefined). An object opts in with overrides, and its
+  // branch parses through MemorySetting so inner defaults (e.g. coreLimit) still apply.
+  memory: z.union([z.boolean(), MemorySetting]).optional().transform((m) => {
+    if (m === undefined || m === false) return undefined;
+    return m === true ? MemorySetting.parse({}) : m;
+  }),
 });
 
 const ChannelWatch = z.object({
@@ -44,6 +56,8 @@ const TeamConfig = z.object({
   // without re-parsing it, whereas .prefault() runs it through the schema.
   frontDesk: z.object({ maxTurns: z.number().int().positive().default(6) }).prefault({}),
   sweep: z.object({ cron: z.string() }).optional(),
+  // Team-level memory knob (accepted but unwired until a later task adds reflection).
+  memory: z.object({ reflect: z.object({ cron: z.string() }).optional() }).optional(),
   connections: z.record(z.string(), ConnectionConfig).default({}),
   deskmates: z.record(z.string(), DeskmateConfig).default({}),
   channels: z.record(z.string(), ChannelRoute).default({}),
