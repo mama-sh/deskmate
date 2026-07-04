@@ -6,6 +6,8 @@ import { planSync } from "./plan.js";
 
 export const CONFIG_FILE = "deskmate.config.ts";
 
+let importSeq = 0;
+
 /**
  * `deskmate sync`: read the consumer's `deskmate.config.ts` and (re)generate the
  * entire `agent/**` tree Eve discovers at build time. `sync` OWNS `agent/**` — it
@@ -16,7 +18,10 @@ export const CONFIG_FILE = "deskmate.config.ts";
  * flag; on older Node the import throws and we surface that hint. (The generated
  * tree itself targets Node 24 — see the root package.json `engines`.)
  */
-export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
+export async function syncCommand(
+  cwd: string = process.cwd(),
+  opts: { quiet?: boolean } = {},
+): Promise<void> {
   const configPath = join(cwd, CONFIG_FILE);
   if (!existsSync(configPath)) {
     throw new Error(`no ${CONFIG_FILE} found in ${cwd}. Run \`deskmate add <id>\` first.`);
@@ -24,7 +29,13 @@ export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
 
   let mod: { default?: unknown };
   try {
-    mod = (await import(pathToFileURL(configPath).href)) as { default?: unknown };
+    // `deskmate dev` re-syncs in one long-lived process; ESM caches modules by URL,
+    // so re-importing the same config path returns the stale original. A unique query
+    // string forces re-evaluation so config edits live-reload. (Registry grows by one
+    // module per re-sync — negligible for a dev session.)
+    mod = (await import(pathToFileURL(configPath).href + `?reload=${++importSeq}`)) as {
+      default?: unknown;
+    };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     throw new Error(
@@ -69,8 +80,12 @@ export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
     writeFileSync(path, contents);
   }
 
-  console.log(
-    `✓ deskmate sync: wrote ${plan.writes.length} file(s), removed ${plan.deletes.length} stale subagent dir(s).`,
-  );
-  for (const w of plan.warnings) console.log(`  ⚠ ${w}`);
+  // Watch-mode re-syncs pass `{ quiet: true }`: they run under an interactive TUI,
+  // so any stray stdout here would corrupt the display. Default path is unchanged.
+  if (!opts.quiet) {
+    console.log(
+      `✓ deskmate sync: wrote ${plan.writes.length} file(s), removed ${plan.deletes.length} stale subagent dir(s).`,
+    );
+    for (const w of plan.warnings) console.log(`  ⚠ ${w}`);
+  }
 }

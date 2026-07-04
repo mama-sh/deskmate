@@ -7,6 +7,7 @@
   "scripts": {
     "build": "deskmate sync && eve build",
     "sync": "deskmate sync",
+    "dev": "deskmate dev",
     "typecheck": "tsc",
     "test": "vitest run --passWithNoTests"
   },
