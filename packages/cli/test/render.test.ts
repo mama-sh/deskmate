@@ -168,6 +168,12 @@ describe("renderFrontDeskInstructions", () => {
     expect(out).toContain("# Convening multiple deskmates");
     expect(out).toContain("deskmate_says");
   });
+
+  it("tells the front desk to keep follow-ups with the same deskmate", () => {
+    const out = renderFrontDeskInstructions().toLowerCase();
+    expect(out).toContain("follow-up");
+    expect(out).toContain("same deskmate");
+  });
 });
 
 describe("renderSubagentInstructions", () => {
