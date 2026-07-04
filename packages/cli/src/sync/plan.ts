@@ -15,6 +15,7 @@ import {
   renderSlackChannel,
   renderStubConnection,
   renderSubagentAgent,
+  renderSubagentInstructions,
 } from "./render.js";
 
 export type FileWrite = { path: string; contents: string | Buffer };
@@ -108,14 +109,16 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
     const role = d.role;
     out(`agent/subagents/${id}/agent.ts`, renderSubagentAgent(id));
 
-    // instructions.md — authored file copied VERBATIM (byte-for-byte, no banner).
+    // instructions.md — authored role instructions composed with core's shared
+    // house-style block (voice + work discipline) + the deskmate's optional `voice`.
     const instrPath = join(cwd, "roles", role, "instructions.md");
-    if (existsSync(instrPath)) {
-      out(`agent/subagents/${id}/instructions.md`, readFileSync(instrPath, "utf8"));
-    } else {
-      out(`agent/subagents/${id}/instructions.md`, missingInstructions(id, role));
+    const roleInstructions = existsSync(instrPath)
+      ? readFileSync(instrPath, "utf8")
+      : missingInstructions(id, role);
+    if (!existsSync(instrPath)) {
       warnings.push(`deskmate "${id}": no authored roles/${role}/instructions.md — wrote a TODO placeholder.`);
     }
+    out(`agent/subagents/${id}/instructions.md`, renderSubagentInstructions(roleInstructions, d.voice));
 
     // tools/<tool>.ts — one re-export shim per authored roles/<role>/tools/*.ts.
     for (const tool of tsFiles(join(cwd, "roles", role, "tools"))) {

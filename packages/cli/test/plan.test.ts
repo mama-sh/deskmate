@@ -132,12 +132,16 @@ describe("planSync", () => {
     }
   });
 
-  it("copies subagent instructions.md byte-for-byte from the authored role", () => {
+  it("composes subagent instructions from the authored role + the house style", () => {
     const plan = planSync(fixtureTeam, cwd);
     const authored = readFileSync(join(cwd, "roles/devops/instructions.md"), "utf8");
     const write = find(plan, "agent/subagents/devops/instructions.md");
-    expect(write?.contents).toBe(authored);
-    expect(write?.contents).toBe(DEVOPS_INSTRUCTIONS);
+    const text = write?.contents?.toString() ?? "";
+    // Authored role prose is preserved and comes first…
+    expect(text.startsWith(authored.trimEnd())).toBe(true);
+    // …then core's shared house-style block is appended.
+    expect(text).toContain("## How you write");
+    expect(text).toContain("## How you work");
   });
 
   it("copies the deskmate's skills tree verbatim, preserving nested dirs", () => {
@@ -218,10 +222,13 @@ describe("planSync", () => {
     } as unknown as TeamConfig;
     const plan = planSync(team, cwd);
 
-    // instructions.md — verbatim from roles/devops, NOT the TODO placeholder.
+    // instructions.md — authored roles/devops prose (NOT the TODO placeholder),
+    // composed with the shared house style.
     const instr = find(plan, "agent/subagents/ops/instructions.md");
-    expect(instr?.contents).toBe(DEVOPS_INSTRUCTIONS);
-    expect(instr?.contents).not.toContain("TODO");
+    const instrText = instr?.contents?.toString() ?? "";
+    expect(instrText.startsWith(DEVOPS_INSTRUCTIONS.trimEnd())).toBe(true);
+    expect(instrText).toContain("## How you write");
+    expect(instrText).not.toContain("TODO");
 
     // tool + connection shims target roles/devops (the role), under the ops subtree.
     const tool = find(plan, "agent/subagents/ops/tools/x.ts");
