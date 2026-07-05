@@ -71,7 +71,7 @@ export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
   }
 
   console.log(
-    `✓ deskmate sync: wrote ${plan.writes.length} file(s), removed ${plan.deletes.length} stale subagent dir(s).`,
+    `✓ deskmate sync: wrote ${plan.writes.length} file(s), removed ${plan.deletes.length} stale generated path(s).`,
   );
   for (const w of plan.warnings) console.log(`  ⚠ ${w}`);
 
