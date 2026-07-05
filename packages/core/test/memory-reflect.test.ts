@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { applyOps, reflectScope, type ReflectionOp } from "../src/memory/reflect.js";
-import { buildReflectionPrompt } from "../src/memory/schedule.js";
+import { buildReflectionPrompt, scheduleReflections } from "../src/memory/schedule.js";
 import { createInMemoryStore } from "../src/memory/adapters/in-memory.js";
 import type { Memory } from "../src/memory/types.js";
 
@@ -70,5 +70,30 @@ describe("reflectScope", () => {
     expect(items.find((m) => m.key === "fact")?.kind).toBe("semantic");
     expect(items.find((m) => m.key === "e1")?.kind).toBe("episodic"); // supersede skipped on episodic
     expect(applied).toBe(1); // only the add was applied; the episodic supersede was skipped
+  });
+});
+
+describe("scheduleReflections (failure isolation)", () => {
+  it("keeps reflecting other deskmates when one deskmate's reflection throws", async () => {
+    const store = createInMemoryStore(() => NOW);
+    // 'a' will trigger a throwing reflector; 'b' is healthy.
+    await store.put({ deskmate: "a" }, { key: "seed", value: "boom", kind: "episodic", importance: 5 });
+    await store.put({ deskmate: "b" }, { key: "seed", value: "ok", kind: "episodic", importance: 5 });
+
+    const reflect = async (items: Memory[]): Promise<ReflectionOp[]> => {
+      if (items.some((m) => m.value === "boom")) throw new Error("reflector blew up for a");
+      return [{ op: "add", key: "derived", value: "consolidated", importance: 7 }];
+    };
+
+    const pending: Promise<unknown>[] = [];
+    scheduleReflections(["a", "b"], store, reflect, NOW, (p) => pending.push(p));
+
+    // The whole batch must settle without rejecting (each failure is caught per-id).
+    await expect(Promise.all(pending)).resolves.toBeDefined();
+    expect(pending).toHaveLength(2);
+
+    // 'b' was reflected despite 'a' throwing; 'a' is unchanged.
+    expect((await store.list({ deskmate: "b" }, { limit: 10 })).some((m) => m.key === "derived")).toBe(true);
+    expect((await store.list({ deskmate: "a" }, { limit: 10 })).some((m) => m.key === "derived")).toBe(false);
   });
 });

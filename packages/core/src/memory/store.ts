@@ -11,11 +11,14 @@ export function pickAdapterKind(env: Record<string, string | undefined>): Adapte
 let cached: MemoryStore | undefined;
 let warned = false;
 
-export async function resolveMemoryStore(env = process.env): Promise<MemoryStore> {
+// Process-wide singleton: resolved once from process.env (which is fixed for the process's
+// lifetime), then reused. Kept env-free deliberately — the choice can't change mid-process,
+// so a per-call env argument would be silently ignored after the first call.
+export async function resolveMemoryStore(): Promise<MemoryStore> {
   if (cached) return cached;
-  if (pickAdapterKind(env) === "neon") {
+  if (pickAdapterKind(process.env) === "neon") {
     const { createNeonStore } = await import("./adapters/neon.js"); // dynamic → optional dep
-    cached = createNeonStore(env.DATABASE_URL!);
+    cached = createNeonStore(process.env.DATABASE_URL!);
   } else {
     if (!warned) {
       console.warn("[deskmate:memory] No DATABASE_URL — memory is ephemeral (in-memory adapter).");

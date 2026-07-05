@@ -21,7 +21,7 @@ export function createMemoryTools(deskmateId: string) {
   const remember = defineTool({
     description:
       "Save ONE durable fact or preference that will help in future threads (a WRITE to long-term memory). " +
-      "Use a stable snake_case `key` so re-saving updates the same fact. Never store secrets, tokens, or one-time codes.",
+      "Use a stable `key` (lowercase letters, digits, `_`, `.`, `-`) so re-saving updates the same fact. Never store secrets, tokens, or one-time codes.",
     inputSchema: z.object({
       key: z.string().min(1).max(80).regex(/^[a-z0-9_.-]+$/),
       value: z.string().min(1).max(2000),

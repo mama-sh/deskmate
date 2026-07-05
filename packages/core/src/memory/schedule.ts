@@ -58,6 +58,27 @@ export function makeModelReflector(model = DEFAULT_REFLECT_MODEL, gen: typeof ge
   };
 }
 
+/**
+ * Schedule each deskmate's reflection independently, isolating failures so one deskmate's
+ * error (DB hiccup, throwing reflector) can't sink the others or fail the schedule run.
+ * Mirrors the per-target isolation in `schedules/deskmate-sweep.ts`.
+ */
+export function scheduleReflections(
+  deskmateIds: string[],
+  store: MemoryStore,
+  reflect: Reflector,
+  now: number,
+  waitUntil: (p: Promise<unknown>) => void,
+): void {
+  for (const id of deskmateIds) {
+    waitUntil(
+      reflectScope(store, { deskmate: id }, reflect, { maxItems: 200, now }).catch((err) => {
+        console.error(`[deskmate:memory] reflection failed for "${id}"`, err);
+      }),
+    );
+  }
+}
+
 /** The nightly reflection ("dreaming") schedule. Codegen passes the memory-enabled deskmate ids. */
 export function createMemoryReflection(
   deskmateIds: string[],
@@ -68,9 +89,7 @@ export function createMemoryReflection(
   return defineSchedule({
     cron: opts.cron ?? DEFAULT_MEMORY_REFLECT_CRON,
     async run({ waitUntil }: ScheduleHandlerArgs) {
-      waitUntil(
-        Promise.all(deskmateIds.map((id) => reflectScope(store, { deskmate: id }, reflect, { maxItems: 200, now: Date.now() }))),
-      );
+      scheduleReflections(deskmateIds, store, reflect, Date.now(), waitUntil);
     },
   });
 }
