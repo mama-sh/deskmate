@@ -41,7 +41,7 @@ export function buildReflectionPrompt(memories: Memory[]): string {
     "- merge: rewrite an existing SEMANTIC memory to fold in a near-duplicate (reuse its key).",
     "- supersede: replace an outdated SEMANTIC fact with the correction (reuse its key, low importance if retiring).",
     "Rules: NEVER propose deleting or rewriting an 'episodic' memory — raw events are immutable.",
-    "Only act when confident; prefer returning few or no ops over speculative ones. Output the ops array.",
+    "Only act when confident; prefer returning few or no ops over speculative ones. Return an object with an \"ops\" array.",
   ].join("\n");
 }
 
