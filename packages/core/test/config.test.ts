@@ -105,4 +105,30 @@ describe("defineTeam", () => {
       channels: { C0INC: { deskmate: "devops", watch: { picker: "nope" } } },
     })).toThrow();
   });
+
+  it("accepts an oauth connection with connect + service", () => {
+    const team = defineTeam({
+      deskmates: { devops: { role: "devops", emoji: "🔧", displayName: "D", summary: "…", reads: ["vercel"] } },
+      connections: { vercel: { kind: "mcp", connect: "vercel/deskmate", service: "mcp.vercel.com" } },
+    });
+    expect(team.connections.vercel).toMatchObject({ kind: "mcp", connect: "vercel/deskmate", service: "mcp.vercel.com" });
+  });
+
+  it("rejects a connection that sets both env (token) and connect (oauth)", () => {
+    expect(() =>
+      defineTeam({
+        deskmates: {},
+        connections: { bad: { kind: "mcp", env: "BAD", connect: "bad/deskmate" } },
+      }),
+    ).toThrow(/either .*env.* or .*connect/i);
+  });
+
+  it("rejects `service` without `connect`", () => {
+    expect(() =>
+      defineTeam({
+        deskmates: {},
+        connections: { bad: { kind: "mcp", env: "BAD", service: "mcp.bad.com" } },
+      }),
+    ).toThrow(/service.*only.*connect/i);
+  });
 });
