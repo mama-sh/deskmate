@@ -44,9 +44,9 @@ export function loadLocalEnv(cwd: string): string | null {
         return f;
       } catch (err) {
         // A malformed env file would otherwise silently leave doctor checking an
-        // unloaded env — say which file failed and why so it's actionable.
-        console.warn(`⚠ could not load env from ${f}: ${err instanceof Error ? err.message : String(err)} — continuing without it.`);
-        return null;
+        // unloaded env — say which file failed and why, then fall through to the next
+        // candidate (a bad .vercel/.env.production.local shouldn't block a valid .env).
+        console.warn(`⚠ could not load env from ${f}: ${err instanceof Error ? err.message : String(err)} — trying the next candidate.`);
       }
     }
   }
@@ -63,7 +63,9 @@ export function loadLocalEnv(cwd: string): string | null {
 export function findConnectionFile(name: string, cwd: string): string | null {
   const rolesDir = join(cwd, "roles");
   if (existsSync(rolesDir)) {
-    for (const id of readdirSync(rolesDir)) {
+    // Sort for a deterministic pick when >1 role has a same-named connection file —
+    // raw readdir order varies by filesystem/platform.
+    for (const id of readdirSync(rolesDir).sort()) {
       const p = join(rolesDir, id, "connections", `${name}.ts`);
       if (existsSync(p)) return p;
     }

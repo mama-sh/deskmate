@@ -70,6 +70,15 @@ describe("renderMcpConnection", () => {
     });
     expect(src).toContain('"X-Api-Key": process.env["DOCS_MCP_TOKEN"] || ""');
   });
+
+  it("custom-header scheme falls back to X-Api-Key when the header name is not a valid HTTP token", () => {
+    const src = renderMcpConnection({
+      name: "docs", urlEnv: "DOCS_MCP_URL", tokenEnv: "DOCS_MCP_TOKEN",
+      description: "Docs.", tools: ["search"], scheme: "custom-header", headerName: "bad\nname",
+    });
+    expect(src).toContain('"X-Api-Key": process.env["DOCS_MCP_TOKEN"] || ""');
+    expect(src).not.toContain("bad\nname"); // the newline-bearing name never reaches the output
+  });
 });
 
 describe("renderConnectConnection", () => {

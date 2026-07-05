@@ -149,6 +149,21 @@ describe("loadLocalEnv", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("falls through to the next candidate when an earlier env file fails to load", () => {
+    const dir = mkdtempSync(join(tmpdir(), "deskmate-env-"));
+    try {
+      mkdirSync(join(dir, ".vercel", ".env.production.local"), { recursive: true }); // a DIR → load throws
+      writeFileSync(join(dir, ".env.local"), "DESKMATE_DOCTOR_FALLBACK=yes\n");
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      expect(loadLocalEnv(dir)).toBe(join(dir, ".env.local"));
+      expect(process.env.DESKMATE_DOCTOR_FALLBACK).toBe("yes");
+      expect(warnSpy).toHaveBeenCalled();
+    } finally {
+      delete process.env.DESKMATE_DOCTOR_FALLBACK;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("findConnectionFile", () => {
@@ -171,6 +186,19 @@ describe("findConnectionFile", () => {
       mkdirSync(join(dir, "connections"), { recursive: true });
       writeFileSync(join(dir, "connections", "foo.ts"), "// shared");
       expect(findConnectionFile("foo", dir)).toBe(join(dir, "connections", "foo.ts"));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("picks the alphabetically-first role deterministically when multiple roles define it", () => {
+    const dir = mkdtempSync(join(tmpdir(), "deskmate-conn-"));
+    try {
+      for (const role of ["zeta", "alpha", "mid"]) {
+        mkdirSync(join(dir, "roles", role, "connections"), { recursive: true });
+        writeFileSync(join(dir, "roles", role, "connections", "foo.ts"), `// ${role}`);
+      }
+      expect(findConnectionFile("foo", dir)).toBe(join(dir, "roles", "alpha", "connections", "foo.ts"));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

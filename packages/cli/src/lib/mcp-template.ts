@@ -27,7 +27,11 @@ export function renderMcpConnection(opts: McpTemplateOptions): string {
     credLine = `  headers: { Authorization: \`Basic \${Buffer.from(${tokenExpr}).toString("base64")}\` },`;
     hint = `// Set ${opts.urlEnv} + ${opts.tokenEnv} (plaintext "publicKey:secretKey", base64-encoded here) to run against a real server.`;
   } else if (scheme === "custom-header") {
-    const header = opts.headerName ?? "X-Api-Key";
+    // Validate the header name (RFC 7230 token chars). It's interpolated raw into the
+    // generated file's `//` hint, so a value with a newline/space would break the
+    // comment into invalid TypeScript — fall back to the safe default instead.
+    const raw = opts.headerName ?? "X-Api-Key";
+    const header = /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(raw) ? raw : "X-Api-Key";
     credLine = `  headers: { ${JSON.stringify(header)}: ${tokenExpr} },`;
     hint = `// Set ${opts.urlEnv} + ${opts.tokenEnv} (sent as the ${header} header) to run against a real server.`;
   } else {
