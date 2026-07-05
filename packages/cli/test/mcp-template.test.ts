@@ -50,6 +50,7 @@ describe("renderMcpConnection", () => {
     expect(src).toContain('Basic ${Buffer.from(process.env["LF_MCP_TOKEN"] || "").toString("base64")}');
     expect(src).toContain("headers: {");
     expect(src).not.toContain("auth:");
+    expect(src).toContain("Set LF_MCP_URL + LF_MCP_TOKEN"); // hint names the URL env too, not just the token
   });
 
   it("custom-header scheme sends the token under the named header", () => {
@@ -59,6 +60,7 @@ describe("renderMcpConnection", () => {
     });
     expect(src).toContain('"X-Api-Key": process.env["DOCS_MCP_TOKEN"] || ""');
     expect(src).toContain("headers: {");
+    expect(src).toContain("Set DOCS_MCP_URL + DOCS_MCP_TOKEN"); // hint names the URL env too
   });
 
   it("custom-header scheme defaults the header name to X-Api-Key when none is given", () => {

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { doctor, loadLocalEnv, type DoctorDeps } from "../src/doctor.js";
+import { doctor, loadLocalEnv, findConnectionFile, type DoctorDeps } from "../src/doctor.js";
 
 beforeEach(() => vi.spyOn(console, "log").mockImplementation(() => {}));
 afterEach(() => vi.restoreAllMocks());
@@ -52,6 +52,15 @@ describe("doctor", () => {
       loadTeam: async () => team({ good: { kind: "mcp", env: "GOOD" } }),
       resolveConnection: async () => ({ kind: "ready", url: "https://good/mcp", headers: {}, allow: [] }),
       probe: async () => ({ reachable: false, authOk: false, error: "ECONNREFUSED" }),
+    });
+    expect(await doctor([], "/proj", d)).toBe(1);
+  });
+
+  it("exits 1 when authed but tools/list errored — even with an empty allow-list (tools unverifiable)", async () => {
+    const d = deps({
+      loadTeam: async () => team({ good: { kind: "mcp", env: "GOOD" } }),
+      resolveConnection: async () => ({ kind: "ready", url: "https://good/mcp", headers: {}, allow: [] }),
+      probe: async () => ({ reachable: true, authOk: true, tools: [], error: "tools/list HTTP 500" }),
     });
     expect(await doctor([], "/proj", d)).toBe(1);
   });
@@ -124,6 +133,44 @@ describe("loadLocalEnv", () => {
     const dir = mkdtempSync(join(tmpdir(), "deskmate-env-"));
     try {
       expect(loadLocalEnv(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("warns and returns null when an env file can't be loaded", () => {
+    const dir = mkdtempSync(join(tmpdir(), "deskmate-env-"));
+    try {
+      mkdirSync(join(dir, ".env")); // a directory named .env makes loadEnvFile throw (EISDIR)
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      expect(loadLocalEnv(dir)).toBeNull();
+      expect(warnSpy).toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("findConnectionFile", () => {
+  it("prefers a role-local connection file over a shared one (matches sync precedence)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "deskmate-conn-"));
+    try {
+      mkdirSync(join(dir, "connections"), { recursive: true });
+      writeFileSync(join(dir, "connections", "foo.ts"), "// shared");
+      mkdirSync(join(dir, "roles", "x", "connections"), { recursive: true });
+      writeFileSync(join(dir, "roles", "x", "connections", "foo.ts"), "// role-local");
+      expect(findConnectionFile("foo", dir)).toBe(join(dir, "roles", "x", "connections", "foo.ts"));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the shared file when no role-local exists", () => {
+    const dir = mkdtempSync(join(tmpdir(), "deskmate-conn-"));
+    try {
+      mkdirSync(join(dir, "connections"), { recursive: true });
+      writeFileSync(join(dir, "connections", "foo.ts"), "// shared");
+      expect(findConnectionFile("foo", dir)).toBe(join(dir, "connections", "foo.ts"));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

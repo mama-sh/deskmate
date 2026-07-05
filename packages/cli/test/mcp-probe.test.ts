@@ -65,6 +65,22 @@ describe("probeMcp", () => {
     expect(r.tools).toEqual(["page1_tool", "page2_tool"]);
   });
 
+  it("caps pagination at 20 pages and surfaces a truncation error when the cursor never clears", async () => {
+    let pages = 0;
+    const fetchImpl = async (_url: string, opts: any) => {
+      const req = JSON.parse(opts.body);
+      if (req.method === "initialize") return resp({ jsonrpc: "2.0", id: 1, result: {} });
+      if (req.method === "notifications/initialized") return new Response(null, { status: 202 });
+      pages++;
+      return resp({ jsonrpc: "2.0", id: 2, result: { tools: [{ name: `t${pages}` }], nextCursor: `c${pages}` } });
+    };
+    const r = await probeMcp("https://x/mcp", {}, fetchImpl as any);
+    expect(pages).toBe(20); // stopped at the cap, didn't loop forever
+    expect(r.tools).toHaveLength(20);
+    expect(r.error).toContain("20 pages");
+    expect(r.authOk).toBe(true);
+  });
+
   it("picks the JSON-RPC response frame from a multi-frame SSE body (notification first)", async () => {
     const fetchImpl = async (_url: string, opts: any) => {
       const method = JSON.parse(opts.body).method;

@@ -117,5 +117,11 @@ export async function probeMcp(
     cursor = typeof body?.result?.nextCursor === "string" && body.result.nextCursor ? body.result.nextCursor : undefined;
     if (!cursor) break;
   }
+  // Cap hit with a cursor still pending (huge tool set or a server that loops cursors):
+  // the tool list is truncated. Surface it as an error so callers don't diff an
+  // allow-list against a partial set and report a false "missing tool".
+  if (cursor) {
+    return { reachable: true, authOk: true, tools, status, error: "tools/list exceeded 20 pages (still paginating) — tool list truncated" };
+  }
   return { reachable: true, authOk: true, tools, status };
 }

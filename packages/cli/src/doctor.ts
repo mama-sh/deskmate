@@ -42,7 +42,10 @@ export function loadLocalEnv(cwd: string): string | null {
       try {
         load(f);
         return f;
-      } catch {
+      } catch (err) {
+        // A malformed env file would otherwise silently leave doctor checking an
+        // unloaded env — say which file failed and why so it's actionable.
+        console.warn(`⚠ could not load env from ${f}: ${err instanceof Error ? err.message : String(err)} — continuing without it.`);
         return null;
       }
     }
@@ -50,10 +53,14 @@ export function loadLocalEnv(cwd: string): string | null {
   return null;
 }
 
-/** Locate the authored connection file: shared root, then any roles/<id>/connections/. */
-function findConnectionFile(name: string, cwd: string): string | null {
-  const shared = join(cwd, "connections", `${name}.ts`);
-  if (existsSync(shared)) return shared;
+/**
+ * Locate the authored connection file with the SAME precedence `deskmate sync` uses
+ * (see sync/plan.ts): deskmate-local `roles/<role>/connections/<name>.ts` FIRST, then
+ * shared `connections/<name>.ts`. Matching the order matters — when a role-local file
+ * shadows a shared one of the same name, sync deploys the role-local file, so doctor
+ * must probe that same file or it validates something the deploy never runs.
+ */
+export function findConnectionFile(name: string, cwd: string): string | null {
   const rolesDir = join(cwd, "roles");
   if (existsSync(rolesDir)) {
     for (const id of readdirSync(rolesDir)) {
@@ -61,6 +68,8 @@ function findConnectionFile(name: string, cwd: string): string | null {
       if (existsSync(p)) return p;
     }
   }
+  const shared = join(cwd, "connections", `${name}.ts`);
+  if (existsSync(shared)) return shared;
   return null;
 }
 
@@ -182,6 +191,14 @@ export async function doctor(_args: string[] = [], cwd: string = process.cwd(), 
     }
     if (!r.authOk) {
       bad(`auth failed${r.status ? ` (HTTP ${r.status})` : ""} — check ${prefix}_MCP_TOKEN.`);
+      failures++;
+      continue;
+    }
+    // Authed but tools/list errored or truncated (HTTP/parse/transport, or the page
+    // cap) — the tool set is unreliable, so the allow-list diff below can't be trusted.
+    // Fail rather than pass green on an unverified connection.
+    if (r.error) {
+      bad(`authed, but listing tools failed (${r.error}) — can't verify the allow-list.`);
       failures++;
       continue;
     }

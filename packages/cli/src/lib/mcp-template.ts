@@ -25,11 +25,11 @@ export function renderMcpConnection(opts: McpTemplateOptions): string {
   if (scheme === "basic") {
     // Token env holds plaintext "publicKey:secretKey"; base64-encode it at runtime.
     credLine = `  headers: { Authorization: \`Basic \${Buffer.from(${tokenExpr}).toString("base64")}\` },`;
-    hint = `// Set ${opts.tokenEnv} to plaintext "publicKey:secretKey" (this file base64-encodes it).`;
+    hint = `// Set ${opts.urlEnv} + ${opts.tokenEnv} (plaintext "publicKey:secretKey", base64-encoded here) to run against a real server.`;
   } else if (scheme === "custom-header") {
     const header = opts.headerName ?? "X-Api-Key";
     credLine = `  headers: { ${JSON.stringify(header)}: ${tokenExpr} },`;
-    hint = `// Set ${opts.tokenEnv} to the ${header} value.`;
+    hint = `// Set ${opts.urlEnv} + ${opts.tokenEnv} (sent as the ${header} header) to run against a real server.`;
   } else {
     credLine = `  auth: { getToken: async () => ({ token: ${tokenExpr} }) },`;
     hint = `// Set ${opts.urlEnv} + ${opts.tokenEnv} to run against a real server, then redeploy.`;
