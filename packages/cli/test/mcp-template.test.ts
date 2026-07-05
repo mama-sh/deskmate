@@ -11,8 +11,8 @@ describe("renderMcpConnection", () => {
       tools: ["search_logs", "get_monitor"],
     });
     expect(out).toContain('import { defineMcpClientConnection } from "eve/connections";');
-    expect(out).toContain("process.env[\"DATADOG_MCP_URL\"] ?? \"https://example.invalid/mcp\"");
-    expect(out).toContain("process.env[\"DATADOG_MCP_TOKEN\"] ?? \"\"");
+    expect(out).toContain("process.env[\"DATADOG_MCP_URL\"] || \"https://example.invalid/mcp\"");
+    expect(out).toContain("process.env[\"DATADOG_MCP_TOKEN\"] || \"\"");
     expect(out).toContain('tools: { allow: ["search_logs", "get_monitor"] }');
     expect(out).toContain("Read-only Datadog: search logs and monitors.");
   });
@@ -22,6 +22,15 @@ describe("renderMcpConnection", () => {
       name: "x", urlEnv: "X_MCP_URL", tokenEnv: "X_MCP_TOKEN", description: "d", tools: [],
     });
     expect(out).toContain("tools: { allow: [] }");
+  });
+
+  it("uses || (not ??) for the URL fallback so an empty-string env still falls back", () => {
+    const src = renderMcpConnection({
+      name: "acme", urlEnv: "ACME_MCP_URL", tokenEnv: "ACME_MCP_TOKEN",
+      description: "Acme.", tools: ["search"],
+    });
+    expect(src).toContain('process.env["ACME_MCP_URL"] || "https://example.invalid/mcp"');
+    expect(src).not.toContain('?? "https://example.invalid/mcp"');
   });
 });
 

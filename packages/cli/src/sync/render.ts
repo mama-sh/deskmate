@@ -289,9 +289,9 @@ export default defineMcpClientConnection({
 import { defineMcpClientConnection } from "eve/connections";
 
 export default defineMcpClientConnection({
-  url: process.env[${JSON.stringify(`${prefix}_MCP_URL`)}] ?? "https://example.invalid/mcp",
+  url: process.env[${JSON.stringify(`${prefix}_MCP_URL`)}] || "https://example.invalid/mcp",
   description: "TODO: replace this stub — the authored connection for \\"${name}\\" is missing.",
-  auth: { getToken: async () => ({ token: process.env[${JSON.stringify(`${prefix}_MCP_TOKEN`)}] ?? "" }) },
+  auth: { getToken: async () => ({ token: process.env[${JSON.stringify(`${prefix}_MCP_TOKEN`)}] || "" }) },
   tools: { allow: [] },
 });
 `;
