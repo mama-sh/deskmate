@@ -259,8 +259,28 @@ export default createMemoryReflection(${JSON.stringify(deskmateIds)}, await reso
  * exists. It is a valid eve connection so `eve build` doesn't crash on a dangling
  * import; the banner + TODO make the gap obvious.
  */
-export function renderStubConnection(name: string, envPrefix: string | undefined): string {
-  const prefix = envPrefix ?? name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+export function renderStubConnection(
+  name: string,
+  conn?: { env?: string; connect?: string; service?: string },
+): string {
+  if (conn?.connect) {
+    return `${BANNER}
+// TODO(deskmate sync): no authored connection file found for oauth connection "${name}". Expected one of:
+//   roles/<id>/connections/${name}.ts   (deskmate-local)
+//   connections/${name}.ts              (shared, at the repo root)
+// Scaffold with \`deskmate mcp-add ${name}\` (choose oauth), then \`deskmate connect ${name}\`.
+import { connect } from "@vercel/connect/eve";
+import { defineMcpClientConnection } from "eve/connections";
+
+export default defineMcpClientConnection({
+  url: "https://example.invalid/mcp",
+  description: "TODO: replace this stub — the authored oauth connection for \\"${name}\\" is missing.",
+  auth: connect({ connector: ${JSON.stringify(conn.connect)}, principalType: "app" }),
+  tools: { allow: [] },
+});
+`;
+  }
+  const prefix = conn?.env ?? name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
   return `${BANNER}
 // TODO(deskmate sync): no authored connection file found for "${name}". Expected one of:
 //   roles/<id>/connections/${name}.ts   (deskmate-local)
@@ -310,6 +330,16 @@ SLACK_CONNECTOR=slack/deskmate
 
   const body = blocks.length ? `\n\n${blocks.join("\n\n")}` : "";
 
+  const oauth = Object.entries(team.connections)
+    .filter(([, c]) => c.kind === "mcp" && !!c.connect)
+    .map(([name, c]) => `#   ${name} → connector ${c.connect}  (run \`deskmate connect ${name}\`)`);
+  const oauthBlock = oauth.length
+    ? `\n\n# ── OAuth connections (Vercel Connect) ────────────────────────────────────
+# App-scoped Vercel Connect — no URL/token here. Provision each with
+# \`deskmate connect <name>\` (runs vercel connect create/attach + vercel env pull):
+${oauth.join("\n")}`
+    : "";
+
   // Only surface DATABASE_URL when ≥1 deskmate opts into memory — the store falls
   // back to an ephemeral in-memory adapter without it, so it's noise otherwise.
   const anyMemory = Object.values(team.deskmates).some((d) => d.memory);
@@ -320,5 +350,5 @@ SLACK_CONNECTOR=slack/deskmate
 # DATABASE_URL=postgres://...`
     : "";
 
-  return `${preamble}${body}${memory}\n`;
+  return `${preamble}${body}${memory}${oauthBlock}\n`;
 }

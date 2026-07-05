@@ -144,7 +144,7 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
       } else if (existsSync(shared)) {
         contents = renderReexport(`../../../../connections/${name}.js`, { star: true });
       } else {
-        contents = renderStubConnection(name, team.connections[name]?.env);
+        contents = renderStubConnection(name, team.connections[name]);
         warnings.push(
           `deskmate "${id}": connection "${name}" has no authored file (roles/${role}/connections/${name}.ts ` +
             `or connections/${name}.ts) — wrote a TODO stub.`,

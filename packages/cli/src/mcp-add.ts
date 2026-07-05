@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { renderMcpConnection } from "./lib/mcp-template.js";
+import { renderMcpConnection, renderConnectConnection } from "./lib/mcp-template.js";
 import { appendConnectionEntry, renderEntry } from "./config-file.js";
 import { CONFIG_FILE, editConfig } from "./add.js";
 import { isValidId } from "./lib/ids.js";
@@ -45,6 +45,36 @@ async function withPrompts<T>(
 }
 
 /**
+ * Scaffold an app-scoped OAuth (Vercel Connect) MCP connection: write
+ * `./connections/<name>.ts` and append a `{ kind:"mcp", connect, service }` entry
+ * to `./deskmate.config.ts`. Never clobbers an existing connection file.
+ */
+export function scaffoldConnectConnection(
+  spec: { name: string; connector: string; service: string; url: string; description: string; tools: string[] },
+  cwd: string,
+): void {
+  const file = join(cwd, "connections", `${spec.name}.ts`);
+  if (existsSync(file)) {
+    console.log(`• ${spec.name}: connections/${spec.name}.ts already exists, skipping (edit it directly, or remove it first)`);
+    return;
+  }
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, renderConnectConnection(spec));
+  console.log(`✓ created connections/${spec.name}.ts`);
+
+  const entry = { kind: "mcp", connect: spec.connector, service: spec.service || undefined };
+  editConfig(
+    cwd,
+    spec.name,
+    (s) => appendConnectionEntry(s, spec.name, entry),
+    renderEntry(spec.name, entry),
+    `${spec.name}: already in connections`,
+  );
+  console.log(`  provision it with \`deskmate connect ${spec.name}\`.`);
+  console.log("  the generated file imports @vercel/connect — install it in this app if it isn't already: `pnpm add @vercel/connect`.");
+}
+
+/**
  * `deskmate mcp-add <name>`: scaffold a read-only, env-token MCP connection into
  * the consumer-local `./connections/<name>.ts`, and append a `connections.<name>`
  * entry to `./deskmate.config.ts` (or print it if the config can't be edited).
@@ -57,6 +87,23 @@ export async function mcpAdd(args: string[], cwd: string = process.cwd()): Promi
   }
   const upper = name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
   await withPrompts(async (ask) => {
+    const mode = (await ask("Auth [token/oauth]", "token")).toLowerCase();
+    if (mode === "oauth") {
+      const url = await ask("MCP URL", `https://mcp.${name}.com`);
+      let serviceDefault = "";
+      try { serviceDefault = new URL(url).host; } catch { serviceDefault = ""; }
+      const service = await ask("Connect service id", serviceDefault);
+      // The connector UID is `<service>/<name>` — the shape `vercel connect create
+      // <service> --name <name>` mints. Deriving it from `service` keeps the config,
+      // the generated connection file, and `deskmate connect` in agreement.
+      const connector = await ask("Connector UID", service ? `${service}/deskmate` : `${name}/deskmate`);
+      const description = await ask("Description (for the model)", `${name} (OAuth MCP).`);
+      const toolsRaw = await ask("Read tools (comma-separated)", "");
+      const tools = toolsRaw.split(",").map((t) => t.trim()).filter(Boolean);
+      scaffoldConnectConnection({ name, connector, service, url, description, tools }, cwd);
+      return;
+    }
+    // ── token path (unchanged) ─────────────────────────────────────────────
     const urlEnv = await ask("URL env var", `${upper}_MCP_URL`);
     const tokenEnv = await ask("Token env var", `${upper}_MCP_TOKEN`);
     const description = await ask("Description (for the model)", `Read-only ${name} MCP.`);

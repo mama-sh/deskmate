@@ -29,6 +29,7 @@ const fixtureTeam = {
   connections: {
     sentry: { kind: "mcp", env: "SENTRY" },
     mixpanel: { kind: "mcp", env: "MIXPANEL" },
+    vercel: { kind: "mcp", connect: "vercel/deskmate", service: "mcp.vercel.com" },
     ledger: { kind: "tool", from: "./ledger.js" },
   },
   deskmates: {
@@ -236,6 +237,16 @@ describe("renderEnvExample", () => {
     expect(out).not.toContain("DESKMATE_MAX_TURNS");
   });
 
+  it("lists oauth connections in a Vercel Connect block, without URL/TOKEN vars", () => {
+    const out = renderEnvExample(fixtureTeam);
+    expect(out).not.toContain("VERCEL_MCP_URL=");
+    expect(out).not.toContain("VERCEL_MCP_TOKEN=");
+    expect(out).toContain("OAuth connections (Vercel Connect)");
+    expect(out).toContain("vercel");
+    expect(out).toContain("vercel/deskmate");
+    expect(out).toContain("deskmate connect vercel");
+  });
+
   it("omits DATABASE_URL when no deskmate opts into memory", () => {
     const out = renderEnvExample(fixtureTeam);
     expect(out).not.toContain("DATABASE_URL");
@@ -316,10 +327,9 @@ describe("renderMemoryReflectionSchedule", () => {
 
 describe("renderStubConnection", () => {
   it("reads env vars via bracket access (valid TS even for a non-identifier prefix)", () => {
-    const out = renderStubConnection("weird", "123");
+    const out = renderStubConnection("weird", { env: "123" });
     expect(out).toContain('process.env["123_MCP_URL"]');
     expect(out).toContain('process.env["123_MCP_TOKEN"]');
-    // Dot access on a non-identifier prefix would be a TS/JS syntax error.
     expect(out).not.toContain("process.env.123_MCP_URL");
     expect(out).not.toContain("process.env.123_MCP_TOKEN");
   });
@@ -328,5 +338,13 @@ describe("renderStubConnection", () => {
     const out = renderStubConnection("my_conn", undefined);
     expect(out).toContain('process.env["MY_CONN_MCP_URL"]');
     expect(out).toContain('process.env["MY_CONN_MCP_TOKEN"]');
+  });
+
+  it("emits an app-scoped connect() stub for an oauth connection", () => {
+    const out = renderStubConnection("vercel", { connect: "vercel/deskmate", service: "mcp.vercel.com" });
+    expect(out).toContain('import { connect } from "@vercel/connect/eve";');
+    expect(out).toContain('auth: connect({ connector: "vercel/deskmate", principalType: "app" })');
+    expect(out).not.toContain("process.env");
+    expect(out).toContain("deskmate connect vercel");
   });
 });

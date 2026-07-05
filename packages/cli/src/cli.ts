@@ -6,6 +6,7 @@ import { mcpAdd } from "./mcp-add.js";
 import { syncCommand } from "./sync/index.js";
 import { dev } from "./dev.js";
 import { deploy } from "./deploy.js";
+import { connectCommand } from "./connect.js";
 
 const USAGE = [
   "usage:",
@@ -16,6 +17,7 @@ const USAGE = [
   "  deskmate sync             regenerate the agent/** tree from deskmate.config.ts",
   "  deskmate dev              sync + eve dev with live re-sync on config edits",
   "  deskmate deploy           sync + build + fix eve trace + deploy to Vercel",
+  "  deskmate connect <name>   provision an oauth connection's Vercel Connect connector",
 ].join("\n");
 
 const [command, ...rest] = process.argv.slice(2);
@@ -46,6 +48,9 @@ try {
       break;
     case "deploy":
       process.exitCode = await deploy(rest);
+      break;
+    case "connect":
+      process.exitCode = await connectCommand(rest);
       break;
     default:
       console.log(USAGE);
