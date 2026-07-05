@@ -80,4 +80,32 @@ describe("connectCommand", () => {
     expect(code).toBe(1);
     vi.restoreAllMocks();
   });
+
+  it("bails immediately when `vercel connect create` can't be spawned (127)", async () => {
+    const { deps, calls } = makeDeps(
+      { vercel: { kind: "mcp", connect: "mcp.vercel.com/deskmate", service: "mcp.vercel.com" } },
+      [127],
+    );
+    const code = await connectCommand(["vercel"], "/proj", deps);
+    expect(code).toBe(127);
+    expect(calls).toEqual(["vercel connect create mcp.vercel.com --name deskmate"]); // no attach, no env pull
+  });
+
+  it("bails on a 127 from attach without the UID-mismatch guidance", async () => {
+    const errs: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((m?: any) => { errs.push(String(m)); });
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const { deps, calls } = makeDeps(
+      { vercel: { kind: "mcp", connect: "mcp.vercel.com/deskmate", service: "mcp.vercel.com" } },
+      [0, 127],
+    );
+    const code = await connectCommand(["vercel"], "/proj", deps);
+    expect(code).toBe(127);
+    expect(calls).toEqual([
+      "vercel connect create mcp.vercel.com --name deskmate",
+      "vercel connect attach mcp.vercel.com/deskmate --yes",
+    ]); // no env pull
+    expect(errs.join("\n")).not.toMatch(/connector UID must be/i);
+    vi.restoreAllMocks();
+  });
 });

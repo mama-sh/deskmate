@@ -59,15 +59,20 @@ export async function connectCommand(
   const connectorName = uid.includes("/") ? uid.slice(uid.lastIndexOf("/") + 1) : uid;
 
   const createCode = await deps.run("vercel", ["connect", "create", service, "--name", connectorName], cwd);
+  // 127 = the Vercel CLI isn't installed / can't be spawned (runCommand already
+  // printed the cause). attach/env-pull would only repeat the error — bail now.
+  if (createCode === 127) return 127;
   if (createCode !== 0) {
     console.log(`  (vercel connect create exited ${createCode} — continuing; the connector may already exist)`);
   }
   const attachCode = await deps.run("vercel", ["connect", "attach", uid, "--yes"], cwd);
+  if (attachCode === 127) return 127; // spawn failure, not a UID mismatch — skip the guidance below
   if (attachCode !== 0) {
     console.error(
       `✗ vercel connect attach failed (${attachCode}). The connector UID must be \`<service>/<name>\` as minted ` +
         `by \`vercel connect create\`. If it differs, update BOTH \`connect:\` for "${name}" in ${CONFIG_FILE} ` +
-        `and the \`connector:\` literal in connections/${name}.ts to the UID \`vercel connect create\` printed, then re-run.`,
+        `and the \`connector:\` literal in the connection file (connections/${name}.ts or ` +
+        `roles/<id>/connections/${name}.ts) to the UID \`vercel connect create\` printed, then re-run.`,
     );
     return attachCode;
   }
