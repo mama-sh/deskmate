@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/mama-sh/deskmate/compare/cli-v0.2.0...cli-v0.3.0) (2026-07-05)
+
+
+### Features
+
+* **cli:** app-scoped OAuth (Vercel Connect) MCP connections ([#20](https://github.com/mama-sh/deskmate/issues/20)) ([73a2573](https://github.com/mama-sh/deskmate/commit/73a25730769700afcf55653e870c8a20c7d5ada3))
+* cross-thread long-term memory for deskmates ([#17](https://github.com/mama-sh/deskmate/issues/17)) ([db4ff2c](https://github.com/mama-sh/deskmate/commit/db4ff2c92ade674cd7d8768ae94f61d16569eac0))
+
 ## [0.2.0](https://github.com/mama-sh/deskmate/compare/cli-v0.1.0...cli-v0.2.0) (2026-07-04)
 
 
