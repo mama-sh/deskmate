@@ -32,6 +32,42 @@ describe("renderMcpConnection", () => {
     expect(src).toContain('process.env["ACME_MCP_URL"] || "https://example.invalid/mcp"');
     expect(src).not.toContain('?? "https://example.invalid/mcp"');
   });
+
+  it("bearer scheme (default) emits auth.getToken with a Bearer token", () => {
+    const src = renderMcpConnection({
+      name: "acme", urlEnv: "ACME_MCP_URL", tokenEnv: "ACME_MCP_TOKEN",
+      description: "Acme.", tools: ["search"],
+    });
+    expect(src).toContain('auth: { getToken: async () => ({ token: process.env["ACME_MCP_TOKEN"] || "" }) }');
+    expect(src).not.toContain("headers:");
+  });
+
+  it("basic scheme base64-encodes the token env (plaintext pk:sk) into an Authorization: Basic header", () => {
+    const src = renderMcpConnection({
+      name: "lf", urlEnv: "LF_MCP_URL", tokenEnv: "LF_MCP_TOKEN",
+      description: "Langfuse.", tools: ["traces"], scheme: "basic",
+    });
+    expect(src).toContain('Basic ${Buffer.from(process.env["LF_MCP_TOKEN"] || "").toString("base64")}');
+    expect(src).toContain("headers: {");
+    expect(src).not.toContain("auth:");
+  });
+
+  it("custom-header scheme sends the token under the named header", () => {
+    const src = renderMcpConnection({
+      name: "docs", urlEnv: "DOCS_MCP_URL", tokenEnv: "DOCS_MCP_TOKEN",
+      description: "Docs.", tools: ["search"], scheme: "custom-header", headerName: "X-Api-Key",
+    });
+    expect(src).toContain('"X-Api-Key": process.env["DOCS_MCP_TOKEN"] || ""');
+    expect(src).toContain("headers: {");
+  });
+
+  it("custom-header scheme defaults the header name to X-Api-Key when none is given", () => {
+    const src = renderMcpConnection({
+      name: "docs", urlEnv: "DOCS_MCP_URL", tokenEnv: "DOCS_MCP_TOKEN",
+      description: "Docs.", tools: ["search"], scheme: "custom-header",
+    });
+    expect(src).toContain('"X-Api-Key": process.env["DOCS_MCP_TOKEN"] || ""');
+  });
 });
 
 describe("renderConnectConnection", () => {
