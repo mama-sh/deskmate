@@ -18,7 +18,7 @@ const USAGE = [
   "  deskmate sync             regenerate the agent/** tree from deskmate.config.ts",
   "  deskmate dev              sync + eve dev with live re-sync on config edits",
   "  deskmate deploy           sync + build + fix eve trace + deploy to Vercel",
-  "  deskmate doctor           check each MCP connection (reachable? authed? tools match?)",
+  "  deskmate doctor           check each MCP connection (reachable? authed? tools match?) [alias: check]",
   "  deskmate connect <name>   provision an oauth connection's Vercel Connect connector",
 ].join("\n");
 

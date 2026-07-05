@@ -16,6 +16,38 @@ export interface DoctorDeps {
   loadTeam: (cwd: string) => Promise<TeamConfig>;
   resolveConnection: (name: string, cwd: string) => Promise<ResolvedConn>;
   probe: (url: string, headers: Record<string, string>) => Promise<ProbeResult>;
+  /** Load the pulled Vercel env into process.env; returns the file loaded, or null. */
+  loadEnv: (cwd: string) => string | null;
+}
+
+/**
+ * Best-effort: load the pulled Vercel env into `process.env` so doctor checks the REAL
+ * production env. `vercel env pull` only WRITES `.vercel/.env.production.local`; a fresh
+ * `deskmate doctor` process wouldn't otherwise see it, so every connection would read as
+ * `example.invalid` and the gate would pass green having probed nothing. Loads the first
+ * file that exists (production first). An already-set shell var wins over the file (Node's
+ * `loadEnvFile` doesn't override), so exports still take precedence. Returns the file it
+ * loaded, or null. No-op if none exist or the runtime lacks `process.loadEnvFile`.
+ */
+export function loadLocalEnv(cwd: string): string | null {
+  const load = (process as { loadEnvFile?: (p: string) => void }).loadEnvFile;
+  if (typeof load !== "function") return null;
+  const candidates = [
+    join(cwd, ".vercel", ".env.production.local"),
+    join(cwd, ".env.local"),
+    join(cwd, ".env"),
+  ];
+  for (const f of candidates) {
+    if (existsSync(f)) {
+      try {
+        load(f);
+        return f;
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
 }
 
 /** Locate the authored connection file: shared root, then any roles/<id>/connections/. */
@@ -76,6 +108,7 @@ const defaultDeps: DoctorDeps = {
   loadTeam: realLoadTeam,
   resolveConnection: resolveConnectionReal,
   probe: (url, headers) => probeMcp(url, headers),
+  loadEnv: loadLocalEnv,
 };
 
 const ok = (s: string) => console.log(`  ✓ ${s}`);
@@ -90,6 +123,12 @@ const bad = (s: string) => console.log(`  ✗ ${s}`);
  * warnings — a scaffolded-but-not-yet-wired connection is a normal state.
  */
 export async function doctor(_args: string[] = [], cwd: string = process.cwd(), deps: DoctorDeps = defaultDeps): Promise<number> {
+  // Load the pulled prod env BEFORE importing any connection file (their headers/tokens
+  // read process.env at import/getToken time). Without this, doctor's own documented
+  // `vercel env pull` → `deskmate doctor` flow would check an empty env and no-op.
+  const envFile = deps.loadEnv(cwd);
+  if (envFile) console.log(`Checking against env from ${envFile}`);
+
   const team = await deps.loadTeam(cwd);
   const names = Object.keys(team.connections);
   if (names.length === 0) {

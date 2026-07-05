@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { doctor, type DoctorDeps } from "../src/doctor.js";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { doctor, loadLocalEnv, type DoctorDeps } from "../src/doctor.js";
 
 beforeEach(() => vi.spyOn(console, "log").mockImplementation(() => {}));
 afterEach(() => vi.restoreAllMocks());
@@ -11,6 +14,7 @@ function deps(over: Partial<DoctorDeps>): DoctorDeps {
     loadTeam: async () => team({}),
     resolveConnection: async () => ({ kind: "not-found" }),
     probe: async () => ({ reachable: true, authOk: true, tools: [] }),
+    loadEnv: () => null, // hermetic: never touch the real filesystem env in unit tests
     ...over,
   };
 }
@@ -97,5 +101,31 @@ describe("doctor", () => {
       resolveConnection: async () => { throw new Error("import blew up"); },
     });
     await expect(doctor([], "/proj", d)).resolves.toBe(1);
+  });
+});
+
+describe("loadLocalEnv", () => {
+  it("loads .vercel/.env.production.local into process.env (only vars not already set)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "deskmate-env-"));
+    try {
+      mkdirSync(join(dir, ".vercel"), { recursive: true });
+      writeFileSync(join(dir, ".vercel", ".env.production.local"), "DESKMATE_DOCTOR_TEST_URL=https://real/mcp\n");
+      expect(process.env.DESKMATE_DOCTOR_TEST_URL).toBeUndefined();
+      const loaded = loadLocalEnv(dir);
+      expect(loaded).toBe(join(dir, ".vercel", ".env.production.local"));
+      expect(process.env.DESKMATE_DOCTOR_TEST_URL).toBe("https://real/mcp");
+    } finally {
+      delete process.env.DESKMATE_DOCTOR_TEST_URL;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns null when no env file exists", () => {
+    const dir = mkdtempSync(join(tmpdir(), "deskmate-env-"));
+    try {
+      expect(loadLocalEnv(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
