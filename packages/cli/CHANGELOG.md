@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.2.0](https://github.com/mama-sh/deskmate/compare/cli-v0.1.0...cli-v0.2.0) (2026-07-04)
+
+
+### Features
+
+* **cli:** add deskmate dev orchestrator ([7dbd670](https://github.com/mama-sh/deskmate/commit/7dbd670f4b89837f663d4ec461f6ed729e935647))
+* **cli:** add quiet option to syncCommand ([9d63fd9](https://github.com/mama-sh/deskmate/commit/9d63fd9fa34ec89d97a8732d0db174ae5ed39dd3))
+* **cli:** deskmate deploy — fix eve #channel trace gap on Vercel ([a09c562](https://github.com/mama-sh/deskmate/commit/a09c56241bdb39457f62598cdfbb00e7dc54ad15))
+* **cli:** deskmate deploy — fix eve #channel trace gap on Vercel ([0db00a9](https://github.com/mama-sh/deskmate/commit/0db00a9d1ee0ce5dec48cf8460d4d996fecf25cf))
+* **cli:** deskmate dev — local testing loop for your config ([149767c](https://github.com/mama-sh/deskmate/commit/149767cf0880d80d432bdd3b1b5f5241028181fb))
+* **cli:** resolve the consumer's eve binary ([616699b](https://github.com/mama-sh/deskmate/commit/616699b95fe47ee3fc9433cf85b0a51c05c77af8))
+* **cli:** wire up the deskmate dev command ([7f0a56f](https://github.com/mama-sh/deskmate/commit/7f0a56fae6ddd6c8a333497279bf5ca91e4ea7db))
+
+
+### Bug Fixes
+
+* **cli:** address deploy review (spawn errors, signal exits, build flags) ([41b263c](https://github.com/mama-sh/deskmate/commit/41b263c2edd310d6adcdca15c256ebc469b195bf))
+* **cli:** guard deskmate dev against a missing roles dir ([899a364](https://github.com/mama-sh/deskmate/commit/899a364778b4ad099ceaaafead2f6cc7490a6833))
+* **cli:** live-reload deskmate.config.ts edits in deskmate dev ([1177c57](https://github.com/mama-sh/deskmate/commit/1177c57d66a27526c857bd601cbc0741aaf00848))
+* **cli:** serialize deskmate dev re-syncs and harden the roles watcher ([4e0f5f9](https://github.com/mama-sh/deskmate/commit/4e0f5f9a288296374b75dd03ed2bbd676825d385))
+
 ## 0.1.0 (2026-07-04)
 
 

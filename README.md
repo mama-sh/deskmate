@@ -108,16 +108,30 @@ deskmate add product_analyst devops
 #    (Connections were seeded in step 3; edit their env prefixes first if you like.)
 deskmate sync
 
-# 5. Deploy to YOUR Vercel to turn on the Slack surface.
-eve deploy
+# 5. Deploy to YOUR Vercel to turn on the Slack surface. `deskmate deploy` builds
+#    with Vercel's framework detection, patches an eve/Vercel bundling gap, and
+#    uploads the prebuilt output (plain `eve deploy`/`vercel deploy` ship a function
+#    that drops eve's internal files and 500s — see Caveats). Needs the Vercel CLI.
+deskmate deploy
 ```
 
 Every catalog read tool ships with **seed data**, so a fresh project runs and demos
 with zero external infrastructure. Point a deskmate at real data by setting its MCP
 connection env vars (see the generated `.env.example`).
 
-Test agent logic locally over the HTTP session endpoint (Slack itself can't reach
-localhost — see Caveats):
+Test your team locally — `deskmate dev` regenerates the agent tree from
+`deskmate.config.ts` and opens a local chat with the front desk + deskmates,
+re-syncing automatically as you edit the config so changes go live without a
+restart (Slack itself can't reach localhost — see Caveats):
+
+```bash
+deskmate dev   # deskmate sync + eve dev; edits to deskmate.config.ts reload live
+```
+
+Under the hood that's `deskmate sync` then `eve dev` (local TUI + HTTP session
+endpoint; pick a model with `/model`). Point it at a deployment with
+`deskmate dev https://your-app.vercel.app`, or drop to the lower-level `eve dev`
+directly:
 
 ```bash
 eve dev   # local TUI + HTTP session endpoint; pick a model with /model
@@ -301,18 +315,27 @@ but forgets on every cold start. Recall today is substring search; the store is 
 
 Slack reaches the **deployed** project through
 [Vercel Connect](https://vercel.com/docs/connect) — there is no `SLACK_BOT_TOKEN` or
-signing secret to manage. After `eve deploy`, from your project directory:
+signing secret to manage. After `deskmate deploy`, from your project directory:
 
 ```bash
 vercel link && vercel env pull        # connect this checkout to the deployed project
 export FF_CONNECT_ENABLED=1
-vercel connect create slack --triggers
+vercel connect create slack --triggers   # note the connector UID it prints (default: slack/deskmate)
 vercel connect detach <uid> --yes
 vercel connect attach <uid> --triggers --trigger-path /eve/v1/slack --yes
-vercel deploy                         # redeploy so the Slack surface goes live
 ```
 
-This sets `SLACK_CONNECTOR` and points Slack events at Deskmate's `/eve/v1/slack` route.
+This points Slack events at Deskmate's `/eve/v1/slack` route. Deskmate reads the connector
+UID from `SLACK_CONNECTOR`, falling back to `slack/deskmate` when it's unset
+(`process.env.SLACK_CONNECTOR ?? "slack/deskmate"`) — the `connect` commands do **not** set
+that env var for you. So if your connector's UID is `slack/deskmate` you're done; only if
+you used a different UID do you need to set it and redeploy:
+
+```bash
+vercel env add SLACK_CONNECTOR production   # paste the connector UID from `vercel connect create`
+deskmate deploy                             # redeploy so the new env var takes effect
+```
+
 Install the app as **Deskmate**, invite the bot to a channel, and tag `@deskmate`. Custom
 MCP connections are build-time: `deskmate mcp-add` writes a connection file and a config
 entry, then `deskmate sync` + redeploy. They can't be added to a running bot.
@@ -424,8 +447,15 @@ checklist by hand after enabling watching:
   publish, because Node does **not** type-strip files inside `node_modules`.
 - **Vercel-only today.** Eve's durable runtime is Vercel-only ("other platforms coming
   soon") — self-hosting means hosting on *your own* Vercel account.
+- **Deploy with `deskmate deploy`.** Vercel's file tracer doesn't follow eve's
+  package-internal `#…` imports, so a plain `vercel deploy` / `eve deploy` ships functions
+  missing eve's own `#channel/*` files (e.g. `compiled-channel.js`) and 500s on every route
+  with `ERR_MODULE_NOT_FOUND`. `deskmate deploy` builds with framework detection, overlays
+  eve's `dist` into each generated function, then uploads the prebuilt output. It needs the
+  Vercel CLI installed + authenticated; remove the workaround once the upstream tracing gap
+  is fixed.
 - **Slack can't be tested on localhost.** Slack delivers to the deployed project via
-  Connect. Test agent logic locally over the HTTP session endpoint (`eve dev`).
+  Connect. Test agent logic locally with `deskmate dev` (which runs `eve dev`).
 - **Single-deployment, env-token auth.** One organization per deployment; MCP credentials
   live in env vars. Per-org tenancy is intentionally out of scope (see Scope).
 - **One shared Slack identity.** This Eve version doesn't expose a per-reply name/icon, so

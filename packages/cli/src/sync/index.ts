@@ -7,6 +7,8 @@ import { planSync } from "./plan.js";
 
 export const CONFIG_FILE = "deskmate.config.ts";
 
+let importSeq = 0;
+
 /**
  * `deskmate sync`: read the consumer's `deskmate.config.ts` and (re)generate the
  * entire `agent/**` tree Eve discovers at build time. `sync` OWNS `agent/**` — it
@@ -17,7 +19,10 @@ export const CONFIG_FILE = "deskmate.config.ts";
  * flag; on older Node the import throws and we surface that hint. (The generated
  * tree itself targets Node 24 — see the root package.json `engines`.)
  */
-export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
+export async function syncCommand(
+  cwd: string = process.cwd(),
+  opts: { quiet?: boolean } = {},
+): Promise<void> {
   const configPath = join(cwd, CONFIG_FILE);
   if (!existsSync(configPath)) {
     throw new Error(`no ${CONFIG_FILE} found in ${cwd}. Run \`deskmate add <id>\` first.`);
@@ -25,7 +30,13 @@ export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
 
   let mod: { default?: unknown };
   try {
-    mod = (await import(pathToFileURL(configPath).href)) as { default?: unknown };
+    // `deskmate dev` re-syncs in one long-lived process; ESM caches modules by URL,
+    // so re-importing the same config path returns the stale original. A unique query
+    // string forces re-evaluation so config edits live-reload. (Registry grows by one
+    // module per re-sync — negligible for a dev session.)
+    mod = (await import(pathToFileURL(configPath).href + `?reload=${++importSeq}`)) as {
+      default?: unknown;
+    };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     throw new Error(
@@ -70,17 +81,22 @@ export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
     writeFileSync(path, contents);
   }
 
-  console.log(
-    `✓ deskmate sync: wrote ${plan.writes.length} file(s), removed ${plan.deletes.length} stale generated path(s).`,
-  );
-  for (const w of plan.warnings) console.log(`  ⚠ ${w}`);
+  // Watch-mode re-syncs pass `{ quiet: true }`: they run under an interactive TUI,
+  // so any stray stdout here would corrupt the display. Default path is unchanged.
+  if (!opts.quiet) {
+    console.log(
+      `✓ deskmate sync: wrote ${plan.writes.length} file(s), removed ${plan.deletes.length} stale generated path(s).`,
+    );
+    for (const w of plan.warnings) console.log(`  ⚠ ${w}`);
+  }
 
   // Ensure the consumer depends on the Neon serverless driver when any deskmate has
   // memory enabled. `@deskmate/core` loads it via a *dynamic import* and declares it
   // only as an OPTIONAL peer dep, so without this a memory-enabled consumer would hit
   // a runtime module-not-found (and `eve build` couldn't bundle the driver). Add-only
   // + idempotent — see `ensureMemoryRuntimeDep`. Skipped silently if the consumer has
-  // no package.json (nothing to add to).
+  // no package.json (nothing to add to). Runs regardless of `quiet` (it's a real
+  // side effect); only its log lines are quiet-guarded.
   const pkgPath = join(cwd, "package.json");
   if (existsSync(pkgPath)) {
     let parsed: Record<string, unknown> | undefined;
@@ -88,16 +104,20 @@ export async function syncCommand(cwd: string = process.cwd()): Promise<void> {
       parsed = JSON.parse(readFileSync(pkgPath, "utf8")) as Record<string, unknown>;
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      console.log(`  ⚠ could not parse package.json (${reason}) — skipped ensuring ${NEON_DRIVER_PKG}.`);
+      if (!opts.quiet) {
+        console.log(`  ⚠ could not parse package.json (${reason}) — skipped ensuring ${NEON_DRIVER_PKG}.`);
+      }
     }
     if (parsed) {
       const { changed, pkgJson } = ensureMemoryRuntimeDep(parsed, team);
       if (changed) {
         writeFileSync(pkgPath, `${JSON.stringify(pkgJson, null, 2)}\n`);
-        console.log(
-          `  + added ${NEON_DRIVER_PKG}@${NEON_DRIVER_RANGE} to package.json dependencies (a deskmate ` +
-            `has memory enabled) — run your package manager's install to fetch it.`,
-        );
+        if (!opts.quiet) {
+          console.log(
+            `  + added ${NEON_DRIVER_PKG}@${NEON_DRIVER_RANGE} to package.json dependencies (a deskmate ` +
+              `has memory enabled) — run your package manager's install to fetch it.`,
+          );
+        }
       }
     }
   }
