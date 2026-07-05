@@ -16,31 +16,31 @@ function makeDeps(connections: Record<string, unknown>, runCodes: number[] = [])
 
 describe("connectCommand", () => {
   it("runs vercel connect create → attach → env pull for an oauth connection", async () => {
-    const { deps, calls } = makeDeps({ vercel: { kind: "mcp", connect: "vercel/deskmate", service: "mcp.vercel.com" } });
+    const { deps, calls } = makeDeps({ vercel: { kind: "mcp", connect: "mcp.vercel.com/deskmate", service: "mcp.vercel.com" } });
     const code = await connectCommand(["vercel"], "/proj", deps);
     expect(code).toBe(0);
     expect(calls).toEqual([
       "vercel connect create mcp.vercel.com --name deskmate",
-      "vercel connect attach vercel/deskmate --yes",
+      "vercel connect attach mcp.vercel.com/deskmate --yes",
       "vercel env pull",
     ]);
   });
 
   it("tolerates a non-zero `create` (connector may already exist) but still attaches", async () => {
     const { deps, calls } = makeDeps(
-      { vercel: { kind: "mcp", connect: "vercel/deskmate", service: "mcp.vercel.com" } },
+      { vercel: { kind: "mcp", connect: "mcp.vercel.com/deskmate", service: "mcp.vercel.com" } },
       [1, 0, 0],
     );
     vi.spyOn(console, "log").mockImplementation(() => {});
     const code = await connectCommand(["vercel"], "/proj", deps);
     expect(code).toBe(0);
-    expect(calls[1]).toBe("vercel connect attach vercel/deskmate --yes");
+    expect(calls[1]).toBe("vercel connect attach mcp.vercel.com/deskmate --yes");
     vi.restoreAllMocks();
   });
 
   it("returns the attach exit code when attach fails", async () => {
     const { deps } = makeDeps(
-      { vercel: { kind: "mcp", connect: "vercel/deskmate", service: "mcp.vercel.com" } },
+      { vercel: { kind: "mcp", connect: "mcp.vercel.com/deskmate", service: "mcp.vercel.com" } },
       [0, 3],
     );
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -51,7 +51,7 @@ describe("connectCommand", () => {
   });
 
   it("accepts a service passed as a positional arg when config omits it", async () => {
-    const { deps, calls } = makeDeps({ vercel: { kind: "mcp", connect: "vercel/deskmate" } });
+    const { deps, calls } = makeDeps({ vercel: { kind: "mcp", connect: "mcp.vercel.com/deskmate" } });
     const code = await connectCommand(["vercel", "mcp.vercel.com"], "/proj", deps);
     expect(code).toBe(0);
     expect(calls[0]).toBe("vercel connect create mcp.vercel.com --name deskmate");
@@ -74,7 +74,7 @@ describe("connectCommand", () => {
   });
 
   it("errors when no service is available (config + arg both missing)", async () => {
-    const { deps } = makeDeps({ vercel: { kind: "mcp", connect: "vercel/deskmate" } });
+    const { deps } = makeDeps({ vercel: { kind: "mcp", connect: "mcp.vercel.com/deskmate" } });
     vi.spyOn(console, "error").mockImplementation(() => {});
     const code = await connectCommand(["vercel"], "/proj", deps);
     expect(code).toBe(1);

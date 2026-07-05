@@ -88,11 +88,14 @@ export async function mcpAdd(args: string[], cwd: string = process.cwd()): Promi
   await withPrompts(async (ask) => {
     const mode = (await ask("Auth [token/oauth]", "token")).toLowerCase();
     if (mode === "oauth") {
-      const connector = await ask("Connector UID", `${name}/deskmate`);
       const url = await ask("MCP URL", `https://mcp.${name}.com`);
       let serviceDefault = "";
       try { serviceDefault = new URL(url).host; } catch { serviceDefault = ""; }
       const service = await ask("Connect service id", serviceDefault);
+      // The connector UID is `<service>/<name>` — the shape `vercel connect create
+      // <service> --name <name>` mints. Deriving it from `service` keeps the config,
+      // the generated connection file, and `deskmate connect` in agreement.
+      const connector = await ask("Connector UID", service ? `${service}/deskmate` : `${name}/deskmate`);
       const description = await ask("Description (for the model)", `${name} (OAuth MCP).`);
       const toolsRaw = await ask("Read tools (comma-separated)", "");
       const tools = toolsRaw.split(",").map((t) => t.trim()).filter(Boolean);

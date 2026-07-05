@@ -241,10 +241,14 @@ Some MCP servers (e.g. Vercel, Neon) are OAuth-only. Deskmate supports them with
 **app-scoped Vercel Connect** — the deskmate acts as itself (non-interactive), so
 there's no per-user consent step. `@vercel/connect` is already a dependency.
 
-1. Scaffold: `deskmate mcp-add vercel` → choose **oauth**, give the connector UID
-   (e.g. `vercel/deskmate`), the MCP URL, and the Connect service id. This writes
-   `connections/vercel.ts` (using `connect({ …, principalType: "app" })`) and a
-   `{ kind: "mcp", connect, service }` entry in `deskmate.config.ts`.
+1. Scaffold: `deskmate mcp-add vercel` → choose **oauth**, give the MCP URL, the
+   Connect service id, and the connector UID (e.g. `mcp.vercel.com/deskmate`). The
+   connector UID is `<service>/<name>` — exactly what `vercel connect create <service>
+   --name <name>` mints — so it defaults from the service. Note the **Connect service
+   id may differ from the MCP URL host** for some providers, so use the identifier the
+   provider documents for Vercel Connect. This writes `connections/vercel.ts` (using
+   `connect({ …, principalType: "app" })`) and a `{ kind: "mcp", connect, service }`
+   entry in `deskmate.config.ts`.
 2. Provision: `deskmate connect vercel` runs `vercel connect create/attach` +
    `vercel env pull` for you. Requires the Vercel CLI installed and authenticated
    (`vercel login`) — same prerequisite as `deskmate deploy`.

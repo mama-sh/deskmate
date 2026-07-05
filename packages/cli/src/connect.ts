@@ -65,8 +65,9 @@ export async function connectCommand(
   const attachCode = await deps.run("vercel", ["connect", "attach", uid, "--yes"], cwd);
   if (attachCode !== 0) {
     console.error(
-      `✗ vercel connect attach failed (${attachCode}). If it reports an unknown connector, copy the UID ` +
-        `\`vercel connect create\` printed into \`connect:\` for "${name}" in ${CONFIG_FILE}.`,
+      `✗ vercel connect attach failed (${attachCode}). The connector UID must be \`<service>/<name>\` as minted ` +
+        `by \`vercel connect create\`. If it differs, update BOTH \`connect:\` for "${name}" in ${CONFIG_FILE} ` +
+        `and the \`connector:\` literal in connections/${name}.ts to the UID \`vercel connect create\` printed, then re-run.`,
     );
     return attachCode;
   }
