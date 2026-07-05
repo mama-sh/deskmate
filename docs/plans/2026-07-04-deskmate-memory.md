@@ -896,12 +896,16 @@ git add -A && git commit -m "test: verify deskmate memory end-to-end"
 
 ## Code-review follow-ups (from the Task 8 Neon review — non-blocking, tracked)
 
-The Neon adapter was **approved** (injection-safe on every query, optional dep verified in emitted `dist`, DRY via `applyPut`, scope-consistent with in-memory). Open follow-ups to address before this backend takes real concurrent write traffic:
+The Neon adapter was **approved** (injection-safe on every query, optional dep verified in emitted `dist`, DRY via `applyPut`, scope-consistent with in-memory). The follow-ups below were **all resolved in the PR #17 review round** (Copilot + Codex independently re-flagged them), commits `ae7be54` / `a3a9539`:
 
-- **I1 (important, concurrency):** `put` is a client-side read-modify-write over two non-transactional HTTP statements. Two concurrent puts to the same `(workspace, deskmate)` scope can lose a write, because the snapshot-diff eviction `DELETE ... WHERE key NOT IN (my-snapshot)` erases the other writer's freshly-inserted row. Low probability for the single-writer-per-deskmate access pattern (a deskmate's tool calls in a turn run sequentially), but fix before concurrent writers. Fix options: wrap UPSERT+DELETE in the driver `transaction()` / `SELECT ... FOR UPDATE`; OR replace the snapshot-diff eviction with the self-contained `DELETE ... WHERE key IN (subquery ORDER BY score ASC OFFSET maxItems)`.
-- **M2 (minor):** a failed lazy `CREATE TABLE` memoizes the rejected promise, permanently bricking the store. Clear the memo on failure so the next call retries.
-- **M3 (minor, shared with in-memory adapter):** `put` returns `result.find(m => m.key === input.key)!`, which is `undefined` if the just-written low-importance item is immediately evicted from a full pool — violates `Promise<Memory>`. Fix in `applyPut`/both adapters (return the computed `next` regardless of eviction).
-- **M4 (optimization):** `put` re-UPSERTs the whole result set (≤200 rows) and always issues the eviction DELETE. Skip the DELETE when no eviction occurred; consider upserting only the changed row (interacts with M3, tread carefully).
+- **I1 (concurrency) — RESOLVED (`ae7be54`):** `put` now UPSERTs the single normalized row and evicts via a self-contained `DELETE ... WHERE key NOT IN (SELECT key ... ORDER BY <scoreMemory-equivalent> DESC LIMIT maxItems)` over live table state, so a concurrent insert that legitimately ranks in the top-N can't be deleted. No stale snapshot.
+- **M2 (rejected-promise brick) — RESOLVED (`ae7be54`):** a failed lazy init now clears the memo (`catch` resets the cached promise) so the next call retries.
+- **M3 (undefined return) — RESOLVED (`ae7be54`):** `applyPut` now always retains the just-written memory (evicts the lowest-scored of the *others*), so both adapters' `find(input.key)` can't be `undefined`.
+- **M4 (write amplification) — RESOLVED (`ae7be54`):** `put` now UPSERTs only the single changed row plus one self-contained eviction DELETE (no full-set re-UPSERT).
+
+Additional PR-review fixes (`ae7be54` unless noted): `recall` now searches the full bounded pool before applying the limit (not just the top page); `buildReflectionPrompt` caps to top-50 memories and truncates values (bounds prompt cost); the stale `config.ts` team-`memory` comment and the README scoring wording were corrected; and **`deskmate sync` now installs `@neondatabase/serverless` into the consumer's `package.json` when memory is enabled** (`a3a9539`) so durable memory resolves at runtime for real consumers.
+
+Still open: per-deskmate `memory.maxItems` is not plumbed to the store (global 200 cap; only `coreLimit` is wired); semantic/`pgvector` recall is a documented future upgrade.
 
 ## Integration caveat (from Task 6)
 
