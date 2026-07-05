@@ -39,6 +39,9 @@ importers:
       '@deskmate/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@neondatabase/serverless':
+        specifier: ^1.1.0
+        version: 1.1.0
       '@vercel/connect':
         specifier: 0.3.2
         version: 0.3.2(ai@7.0.15(zod@4.4.3))(eve@0.19.0(ai@7.0.15(zod@4.4.3))(vite@8.1.1(@types/node@24.13.2)))
