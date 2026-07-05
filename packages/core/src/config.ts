@@ -4,8 +4,8 @@ const ConnectionConfig = z
   .object({
     kind: z.literal("mcp"),
     env: z.string().optional(), // token model → <ENV>_MCP_URL/_TOKEN
-    connect: z.string().optional(), // oauth model → app-scoped Vercel Connect connector UID
-    service: z.string().optional(), // oauth model → Connect service id for `vercel connect create`
+    connect: z.string().min(1).optional(), // oauth model → app-scoped Vercel Connect connector UID
+    service: z.string().min(1).optional(), // oauth model → Connect service id for `vercel connect create`
   })
   .refine((c) => !(c.env && c.connect), {
     message: "a connection uses either `env` (token) or `connect` (oauth), not both",

@@ -131,4 +131,16 @@ describe("defineTeam", () => {
       }),
     ).toThrow(/service.*only.*connect/i);
   });
+
+  it("rejects an empty connect string", () => {
+    expect(() =>
+      defineTeam({ deskmates: {}, connections: { bad: { kind: "mcp", connect: "" } } }),
+    ).toThrow();
+  });
+
+  it("rejects an empty service string", () => {
+    expect(() =>
+      defineTeam({ deskmates: {}, connections: { bad: { kind: "mcp", connect: "x/deskmate", service: "" } } }),
+    ).toThrow();
+  });
 });
