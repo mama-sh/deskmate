@@ -27,5 +27,16 @@ export function createInMemoryStore(clock: () => number = () => Date.now(), maxI
       data.set(scopeKey(scope), filtered);
       return filtered.length !== items.length;
     },
+    async listScopes() {
+      const scopes: MemoryScope[] = [];
+      for (const [key, items] of data) {
+        if (items.length === 0) continue;
+        // Keys are `${workspace}:${deskmate}`; deskmate ids and Slack team ids
+        // contain no colons, so split on the FIRST ":" to recover the scope.
+        const sep = key.indexOf(":");
+        scopes.push({ workspace: key.slice(0, sep), deskmate: key.slice(sep + 1) });
+      }
+      return scopes;
+    },
   };
 }

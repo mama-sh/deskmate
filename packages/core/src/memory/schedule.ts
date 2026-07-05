@@ -59,21 +59,25 @@ export function makeModelReflector(model = DEFAULT_REFLECT_MODEL, gen: typeof ge
 }
 
 /**
- * Schedule each deskmate's reflection independently, isolating failures so one deskmate's
- * error (DB hiccup, throwing reflector) can't sink the others or fail the schedule run.
+ * Reflect each REAL (workspace, deskmate) scope that actually holds memories — derived from
+ * `store.listScopes()` — for the memory-enabled deskmates. Reflecting `{ deskmate: id }` alone
+ * would only ever touch the workspace-less `"_"` bucket and never consolidate the real,
+ * workspace-scoped Slack memories. Each scope reflects independently, isolating failures so one
+ * scope's error (DB hiccup, throwing reflector) can't sink the others or fail the schedule run.
  * Mirrors the per-target isolation in `schedules/deskmate-sweep.ts`.
  */
-export function scheduleReflections(
+export async function scheduleReflections(
   deskmateIds: string[],
   store: MemoryStore,
   reflect: Reflector,
-  now: number,
   waitUntil: (p: Promise<unknown>) => void,
-): void {
-  for (const id of deskmateIds) {
+): Promise<void> {
+  const enabled = new Set(deskmateIds);
+  const scopes = (await store.listScopes()).filter((s) => enabled.has(s.deskmate));
+  for (const scope of scopes) {
     waitUntil(
-      reflectScope(store, { deskmate: id }, reflect, { maxItems: 200, now }).catch((err) => {
-        console.error(`[deskmate:memory] reflection failed for "${id}"`, err);
+      reflectScope(store, scope, reflect, { maxItems: 200 }).catch((err) => {
+        console.error(`[deskmate:memory] reflection failed for ${scope.deskmate}@${scope.workspace ?? "_"}`, err);
       }),
     );
   }
@@ -89,7 +93,7 @@ export function createMemoryReflection(
   return defineSchedule({
     cron: opts.cron ?? DEFAULT_MEMORY_REFLECT_CRON,
     async run({ waitUntil }: ScheduleHandlerArgs) {
-      scheduleReflections(deskmateIds, store, reflect, Date.now(), waitUntil);
+      await scheduleReflections(deskmateIds, store, reflect, waitUntil);
     },
   });
 }

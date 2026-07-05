@@ -22,4 +22,6 @@ export interface MemoryStore {
   list(scope: MemoryScope, opts: { limit: number }): Promise<Memory[]>;
   put(scope: MemoryScope, input: MemoryInput): Promise<Memory>;
   delete(scope: MemoryScope, key: string): Promise<boolean>;
+  /** Distinct (workspace, deskmate) scopes that currently hold at least one memory. */
+  listScopes(): Promise<MemoryScope[]>;
 }

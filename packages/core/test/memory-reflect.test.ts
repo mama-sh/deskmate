@@ -65,7 +65,7 @@ describe("reflectScope", () => {
       { op: "add", key: "fact", value: "synthesized", importance: 8 },
       { op: "supersede", key: "e1", value: "x", importance: 1 },
     ];
-    const applied = await reflectScope(store, { deskmate: "cs" }, reflect, { maxItems: 200, now: NOW });
+    const applied = await reflectScope(store, { deskmate: "cs" }, reflect, { maxItems: 200 });
     const items = await store.list({ deskmate: "cs" }, { limit: 10 });
     expect(items.find((m) => m.key === "fact")?.kind).toBe("semantic");
     expect(items.find((m) => m.key === "e1")?.kind).toBe("episodic"); // supersede skipped on episodic
@@ -73,12 +73,13 @@ describe("reflectScope", () => {
   });
 });
 
-describe("scheduleReflections (failure isolation)", () => {
-  it("keeps reflecting other deskmates when one deskmate's reflection throws", async () => {
+describe("scheduleReflections (real scopes + failure isolation)", () => {
+  it("reflects the real workspace-scoped memories and isolates a failing scope", async () => {
     const store = createInMemoryStore(() => NOW);
-    // 'a' will trigger a throwing reflector; 'b' is healthy.
-    await store.put({ deskmate: "a" }, { key: "seed", value: "boom", kind: "episodic", importance: 5 });
-    await store.put({ deskmate: "b" }, { key: "seed", value: "ok", kind: "episodic", importance: 5 });
+    // Both memories live under a concrete workspace (T1), as real Slack memories always do.
+    // 'a'@T1 trips a throwing reflector; 'b'@T1 is healthy.
+    await store.put({ deskmate: "a", workspace: "T1" }, { key: "seed", value: "boom", kind: "episodic", importance: 5 });
+    await store.put({ deskmate: "b", workspace: "T1" }, { key: "seed", value: "ok", kind: "episodic", importance: 5 });
 
     const reflect = async (items: Memory[]): Promise<ReflectionOp[]> => {
       if (items.some((m) => m.value === "boom")) throw new Error("reflector blew up for a");
@@ -86,14 +87,17 @@ describe("scheduleReflections (failure isolation)", () => {
     };
 
     const pending: Promise<unknown>[] = [];
-    scheduleReflections(["a", "b"], store, reflect, NOW, (p) => pending.push(p));
+    await scheduleReflections(["a", "b"], store, reflect, (p) => pending.push(p));
 
-    // The whole batch must settle without rejecting (each failure is caught per-id).
+    // The whole batch must settle without rejecting (each failure is caught per-scope).
     await expect(Promise.all(pending)).resolves.toBeDefined();
     expect(pending).toHaveLength(2);
 
-    // 'b' was reflected despite 'a' throwing; 'a' is unchanged.
-    expect((await store.list({ deskmate: "b" }, { limit: 10 })).some((m) => m.key === "derived")).toBe(true);
-    expect((await store.list({ deskmate: "a" }, { limit: 10 })).some((m) => m.key === "derived")).toBe(false);
+    // 'b'@T1 was reflected despite 'a'@T1 throwing; 'a'@T1 is unchanged.
+    expect((await store.list({ deskmate: "b", workspace: "T1" }, { limit: 10 })).some((m) => m.key === "derived")).toBe(true);
+    expect((await store.list({ deskmate: "a", workspace: "T1" }, { limit: 10 })).some((m) => m.key === "derived")).toBe(false);
+
+    // The schedule targeted the REAL workspace (T1), not the workspace-less "_" bucket.
+    expect((await store.list({ deskmate: "b" }, { limit: 10 })).some((m) => m.key === "derived")).toBe(false);
   });
 });

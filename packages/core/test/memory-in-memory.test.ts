@@ -24,4 +24,19 @@ describe("in-memory store", () => {
     expect(await s.delete({ deskmate: "cs" }, "a")).toBe(true);
     expect(await s.delete({ deskmate: "cs" }, "a")).toBe(false);
   });
+  it("listScopes returns the distinct (workspace, deskmate) scopes holding memories", async () => {
+    const s = createInMemoryStore(() => 1_000);
+    await s.put({ deskmate: "a", workspace: "T1" }, { key: "k", value: "x" });
+    await s.put({ deskmate: "b", workspace: "T1" }, { key: "k", value: "x" });
+    await s.put({ deskmate: "a" }, { key: "k", value: "x" }); // no workspace → "_"
+    const scopes = await s.listScopes();
+    const sorted = [...scopes].sort((x, y) =>
+      `${x.workspace}:${x.deskmate}`.localeCompare(`${y.workspace}:${y.deskmate}`),
+    );
+    expect(sorted).toEqual([
+      { workspace: "_", deskmate: "a" },
+      { workspace: "T1", deskmate: "a" },
+      { workspace: "T1", deskmate: "b" },
+    ]);
+  });
 });

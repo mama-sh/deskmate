@@ -30,7 +30,7 @@ export interface Reflector { (memories: Memory[]): Promise<ReflectionOp[]> }
 
 /** Run reflection for one scope against a store: fetch → reflect → apply ops (additive, episodic-safe). Returns # applied. */
 export async function reflectScope(
-  store: MemoryStore, scope: MemoryScope, reflect: Reflector, opts: { maxItems: number; now: number },
+  store: MemoryStore, scope: MemoryScope, reflect: Reflector, opts: { maxItems: number },
 ): Promise<number> {
   const items = await store.list(scope, { limit: opts.maxItems });
   const ops = await reflect(items);

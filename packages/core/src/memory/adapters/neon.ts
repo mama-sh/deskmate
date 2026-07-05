@@ -169,5 +169,13 @@ export function createNeonStore(connectionString: string): MemoryStore {
       )) as unknown as unknown[];
       return rows.length > 0;
     },
+
+    async listScopes() {
+      const sql = await getSql();
+      const rows = (await sql`
+        SELECT DISTINCT workspace, deskmate FROM memories
+      `) as unknown as { workspace: string; deskmate: string }[];
+      return rows.map((r) => ({ workspace: r.workspace, deskmate: r.deskmate }));
+    },
   };
 }
