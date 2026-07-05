@@ -34,6 +34,9 @@ export default defineTeam({
       skill: "ncklrs/startup-os-skills@product-analyst",
       voice: "Calm analyst. States what moved and the number behind it, then what to look at next. No hype.",
       reads: ["mixpanel"],
+      // Opt into cross-thread memory: this deskmate can remember/recall/forget durable
+      // facts across threads, and its core memory is pinned into context each turn.
+      memory: true,
     },
     devops: {
       role: "devops",

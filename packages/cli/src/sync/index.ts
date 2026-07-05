@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { defineTeam, type TeamConfig } from "@deskmate/core";
+import { ensureMemoryRuntimeDep, NEON_DRIVER_PKG, NEON_DRIVER_RANGE } from "./deps.js";
 import { planSync } from "./plan.js";
 
 export const CONFIG_FILE = "deskmate.config.ts";
@@ -84,8 +85,40 @@ export async function syncCommand(
   // so any stray stdout here would corrupt the display. Default path is unchanged.
   if (!opts.quiet) {
     console.log(
-      `✓ deskmate sync: wrote ${plan.writes.length} file(s), removed ${plan.deletes.length} stale subagent dir(s).`,
+      `✓ deskmate sync: wrote ${plan.writes.length} file(s), removed ${plan.deletes.length} stale generated path(s).`,
     );
     for (const w of plan.warnings) console.log(`  ⚠ ${w}`);
+  }
+
+  // Ensure the consumer depends on the Neon serverless driver when any deskmate has
+  // memory enabled. `@deskmate/core` loads it via a *dynamic import* and declares it
+  // only as an OPTIONAL peer dep, so without this a memory-enabled consumer would hit
+  // a runtime module-not-found (and `eve build` couldn't bundle the driver). Add-only
+  // + idempotent — see `ensureMemoryRuntimeDep`. Skipped silently if the consumer has
+  // no package.json (nothing to add to). Runs regardless of `quiet` (it's a real
+  // side effect); only its log lines are quiet-guarded.
+  const pkgPath = join(cwd, "package.json");
+  if (existsSync(pkgPath)) {
+    let parsed: Record<string, unknown> | undefined;
+    try {
+      parsed = JSON.parse(readFileSync(pkgPath, "utf8")) as Record<string, unknown>;
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      if (!opts.quiet) {
+        console.log(`  ⚠ could not parse package.json (${reason}) — skipped ensuring ${NEON_DRIVER_PKG}.`);
+      }
+    }
+    if (parsed) {
+      const { changed, pkgJson } = ensureMemoryRuntimeDep(parsed, team);
+      if (changed) {
+        writeFileSync(pkgPath, `${JSON.stringify(pkgJson, null, 2)}\n`);
+        if (!opts.quiet) {
+          console.log(
+            `  + added ${NEON_DRIVER_PKG}@${NEON_DRIVER_RANGE} to package.json dependencies (a deskmate ` +
+              `has memory enabled) — run your package manager's install to fetch it.`,
+          );
+        }
+      }
+    }
   }
 }

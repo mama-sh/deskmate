@@ -239,6 +239,95 @@ describe("planSync", () => {
     expect(b.deletes).toEqual(a.deletes);
   });
 
+  // A team where `devops` opts into cross-thread memory (coreLimit 12) and
+  // `product_analyst` does not. The parsed config puts `{ maxItems, coreLimit }` on
+  // the deskmate when memory is on, and `undefined` when off.
+  const memoryTeam = {
+    ...fixtureTeam,
+    memory: { reflect: { cron: "30 2 * * *" } },
+    deskmates: {
+      devops: { ...fixtureTeam.deskmates.devops, memory: { maxItems: 200, coreLimit: 12 } },
+      product_analyst: { ...fixtureTeam.deskmates.product_analyst },
+    },
+  } as unknown as TeamConfig;
+
+  it("emits the four memory shims for a memory-enabled deskmate", () => {
+    const plan = planSync(memoryTeam, cwd);
+    const remember = find(plan, "agent/subagents/devops/tools/remember.ts");
+    expect(remember?.contents).toContain('import { createMemoryTools } from "@deskmate/core/memory";');
+    expect(remember?.contents).toContain('createMemoryTools("devops").remember');
+    expect(find(plan, "agent/subagents/devops/tools/recall.ts")?.contents).toContain(
+      'createMemoryTools("devops").recall',
+    );
+    expect(find(plan, "agent/subagents/devops/tools/forget.ts")?.contents).toContain(
+      'createMemoryTools("devops").forget',
+    );
+    // instructions/memory.ts coexists with the composed root instructions.md.
+    const instr = find(plan, "agent/subagents/devops/instructions/memory.ts");
+    expect(instr?.contents).toContain('createMemoryInstructions("devops", 12)');
+    // The composed root instructions.md is still generated alongside it.
+    expect(find(plan, "agent/subagents/devops/instructions.md")).toBeDefined();
+  });
+
+  it("emits NONE of the memory shims for a deskmate without memory", () => {
+    const plan = planSync(memoryTeam, cwd);
+    const ps = paths(plan);
+    for (const rel of [
+      "agent/subagents/product_analyst/tools/remember.ts",
+      "agent/subagents/product_analyst/tools/recall.ts",
+      "agent/subagents/product_analyst/tools/forget.ts",
+      "agent/subagents/product_analyst/instructions/memory.ts",
+    ]) {
+      expect(ps).not.toContain(join(cwd, rel));
+    }
+  });
+
+  it("emits the root reflection schedule exactly once with the enabled ids + configured cron", () => {
+    const plan = planSync(memoryTeam, cwd);
+    const sched = find(plan, "agent/schedules/memory-reflection.ts");
+    expect(sched?.contents).toContain('createMemoryReflection(["devops"]');
+    expect(sched?.contents).toContain("await resolveMemoryStore()");
+    expect(sched?.contents).toContain('{ cron: "30 2 * * *" }');
+    // Exactly one reflection-schedule file, at the deployment root (not under a subagent).
+    const scheds = plan.writes.filter((w) => w.path.endsWith("agent/schedules/memory-reflection.ts"));
+    expect(scheds.length).toBe(1);
+    expect(scheds[0].path).toBe(join(cwd, "agent/schedules/memory-reflection.ts"));
+  });
+
+  it("falls back to the imported DEFAULT_MEMORY_REFLECT_CRON when the team sets no reflect cron", () => {
+    const noCron = { ...memoryTeam, memory: undefined } as unknown as TeamConfig;
+    const plan = planSync(noCron, cwd);
+    const sched = find(plan, "agent/schedules/memory-reflection.ts");
+    expect(sched?.contents).toContain(
+      "import { createMemoryReflection, resolveMemoryStore, DEFAULT_MEMORY_REFLECT_CRON }",
+    );
+    expect(sched?.contents).toContain("{ cron: DEFAULT_MEMORY_REFLECT_CRON }");
+  });
+
+  it("emits no reflection schedule when no deskmate has memory", () => {
+    const plan = planSync(fixtureTeam, cwd);
+    expect(plan.writes.some((w) => w.path.endsWith("agent/schedules/memory-reflection.ts"))).toBe(false);
+  });
+
+  it("deletes a stale generated reflection schedule when no deskmate has memory", () => {
+    const rel = "agent/schedules/memory-reflection.ts";
+    mkdirSync(join(cwd, "agent/schedules"), { recursive: true });
+    writeFileSync(join(cwd, rel), "// stale\n");
+    try {
+      const plan = planSync(fixtureTeam, cwd);
+      expect(plan.deletes).toContain(join(cwd, rel));
+    } finally {
+      rmSync(join(cwd, rel), { force: true });
+    }
+  });
+
+  it("is idempotent for a memory-enabled team: same inputs → identical writes + deletes", () => {
+    const a = planSync(memoryTeam, cwd);
+    const b = planSync(memoryTeam, cwd);
+    expect(b.writes).toEqual(a.writes);
+    expect(b.deletes).toEqual(a.deletes);
+  });
+
   it("reads authored files from roles/<d.role> when the deskmate id differs from its role", () => {
     // `ops` maps to the authored `roles/devops/` tree (id != role). The generated
     // OUTPUT stays keyed by the id (`agent/subagents/ops/…`); the SOURCE resolves

@@ -302,6 +302,39 @@ Reads run free. Any tool with `approval: always()` pauses before it runs and Eve
 **approve / reject** buttons in the Slack thread. On approve it completes and reports the
 result; on reject it never runs. The example is the DevOps `record_decision` write.
 
+## Memory (opt-in)
+
+By default a deskmate remembers nothing between threads. Set `memory: true` on a deskmate
+and it gains **cross-thread recall** — durable facts it can carry from one conversation to
+the next, scoped per deskmate (and per Slack workspace).
+
+```ts
+product_analyst: {
+  role: "product_analyst",
+  reads: ["mixpanel"],
+  memory: true, // or { coreLimit: 25 } to tune how much is pinned per turn
+},
+```
+
+The model borrows the usual memory vocabulary: **working / core / recall / archival** tiers
+holding **episodic** memories (dated events) and **semantic** ones (durable facts). Each
+turn, the deskmate's highest-scored **core** memories are pinned into context automatically
+(ranked by importance plus a recency boost), so it starts already knowing what matters. Three tools
+handle the rest: **`remember`** writes one fact under a stable key, **`recall`** searches
+its archive, and **`forget`** deletes one — and because `forget` is `approval: always()`,
+it pauses for a human before anything is removed.
+
+Nightly, a cheap LLM **reflection** ("dreaming") consolidates each deskmate's memory while
+it's idle — synthesizing semantic facts from raw events, merging near-duplicates, and
+superseding outdated ones. It is **additive and conservative**: it never rewrites or deletes
+an episodic event, and prefers doing nothing over a speculative edit.
+
+Persistence needs a Postgres. Set **`DATABASE_URL`** (provision a Neon database from the
+[Vercel Marketplace](https://vercel.com/marketplace)) and memory survives restarts and
+deploys. **Without it, memory is ephemeral** — an in-memory store that's fine for local dev
+but forgets on every cold start. Recall today is substring search; the store is built so a
+**pgvector** semantic-recall upgrade drops in later without touching the tools or config.
+
 ## Slack setup (Vercel Connect)
 
 Slack reaches the **deployed** project through
