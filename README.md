@@ -235,6 +235,24 @@ files — always run `deskmate sync` afterward to refresh the generated tree. (W
 into your `build` script — `"build": "deskmate sync && eve build"` — so it runs on every
 deploy; the starter does this.)
 
+### OAuth (Vercel Connect) connections
+
+Some MCP servers (e.g. Vercel, Neon) are OAuth-only. Deskmate supports them with
+**app-scoped Vercel Connect** — the deskmate acts as itself (non-interactive), so
+there's no per-user consent step. `@vercel/connect` is already a dependency.
+
+1. Scaffold: `deskmate mcp-add vercel` → choose **oauth**, give the connector UID
+   (e.g. `vercel/deskmate`), the MCP URL, and the Connect service id. This writes
+   `connections/vercel.ts` (using `connect({ …, principalType: "app" })`) and a
+   `{ kind: "mcp", connect, service }` entry in `deskmate.config.ts`.
+2. Provision: `deskmate connect vercel` runs `vercel connect create/attach` +
+   `vercel env pull` for you. Requires the Vercel CLI installed and authenticated
+   (`vercel login`) — same prerequisite as `deskmate deploy`.
+3. `deskmate sync` and deploy as usual.
+
+Token-based (API-key) MCP servers still use the `env` model: `deskmate mcp-add
+<name>` → **token**, then set `<PREFIX>_MCP_URL` / `<PREFIX>_MCP_TOKEN`.
+
 ### Edit or author a deskmate
 
 To customize a deskmate, edit its **authored** files after `deskmate add`, then `sync`:

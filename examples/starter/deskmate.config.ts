@@ -16,6 +16,10 @@ export default defineTeam({
   connections: {
     mixpanel: { kind: "mcp", env: "MIXPANEL" },
     sentry: { kind: "mcp", env: "SENTRY" },
+    // OAuth (Vercel Connect) connection — app-scoped, no URL/token env.
+    // Scaffold with `deskmate mcp-add vercel` (choose oauth), then provision with
+    // `deskmate connect vercel` (runs vercel connect create/attach + env pull).
+    // vercel: { kind: "mcp", connect: "vercel/deskmate", service: "mcp.vercel.com" },
   },
 
   // The roster. Each entry's `role` names the authored `roles/<id>/` directory;
