@@ -192,6 +192,67 @@ export default createDeskmateSweep(DESKMATES, CHANNEL_ROUTES, { cron: ${JSON.str
 `;
 }
 
+/** The three long-term-memory tools generated (one file each) for a memory-enabled deskmate. */
+export type MemoryToolName = "remember" | "recall" | "forget";
+
+/**
+ * `agent/subagents/<id>/tools/<remember|recall|forget>.ts` — one memory tool shim.
+ * Re-exports a single tool off core's `createMemoryTools(id)` factory, bound to this
+ * deskmate's id (which scopes its memory). All logic lives in `@deskmate/core/memory`.
+ */
+export function renderMemoryTool(id: string, tool: MemoryToolName): string {
+  return `${BANNER}
+import { createMemoryTools } from "@deskmate/core/memory";
+
+export default createMemoryTools(${JSON.stringify(id)}).${tool};
+`;
+}
+
+/**
+ * `agent/subagents/<id>/instructions/memory.ts` — the per-turn dynamic-recall entry
+ * that pins this deskmate's core memory into context. It is a directory entry that
+ * COEXISTS with the composed root `agent/subagents/<id>/instructions.md` (eve reads
+ * `instructions/*` alongside `instructions.md`; the root file comes first, then the
+ * sorted directory entries). `coreLimit` is the deskmate's `memory.coreLimit`,
+ * JSON-encoded as a number.
+ */
+export function renderMemoryInstructions(id: string, coreLimit: number): string {
+  return `${BANNER}
+import { createMemoryInstructions } from "@deskmate/core/memory";
+
+export default createMemoryInstructions(${JSON.stringify(id)}, ${JSON.stringify(coreLimit)});
+`;
+}
+
+/**
+ * `agent/schedules/memory-reflection.ts` — the deployment-root nightly reflection
+ * ("dreaming") schedule. Schedules are root-only, so this lives at the agent root,
+ * NOT under any subagent. Emitted exactly once, only when ≥1 deskmate opts into
+ * memory (see plan.ts). `deskmateIds` is the JSON array of memory-enabled ids.
+ *
+ * `cron`: the team's `memory.reflect.cron` when set (emitted as a JSON string), else
+ * the imported `DEFAULT_MEMORY_REFLECT_CRON` identifier (so the generated file tracks
+ * core's canonical default). We only import the default when it is actually used, to
+ * avoid an unused import in the override case.
+ *
+ * Store wiring uses top-level `await resolveMemoryStore()`: core's
+ * `createMemoryReflection` takes a RESOLVED `MemoryStore`, so the store must be
+ * awaited before the schedule is constructed. That is valid ESM; its acceptance under
+ * `eve build` is validated in a later task.
+ */
+export function renderMemoryReflectionSchedule(deskmateIds: string[], cron?: string): string {
+  const overridden = cron !== undefined;
+  const named = overridden
+    ? "createMemoryReflection, resolveMemoryStore"
+    : "createMemoryReflection, resolveMemoryStore, DEFAULT_MEMORY_REFLECT_CRON";
+  const cronArg = overridden ? JSON.stringify(cron) : "DEFAULT_MEMORY_REFLECT_CRON";
+  return `${BANNER}
+import { ${named} } from "@deskmate/core/memory";
+
+export default createMemoryReflection(${JSON.stringify(deskmateIds)}, await resolveMemoryStore(), { cron: ${cronArg} });
+`;
+}
+
 /**
  * A TODO-stub connection, emitted when a deskmate `reads` a connection but no
  * authored file (`roles/<id>/connections/<name>.ts` or shared `connections/<name>.ts`)
@@ -248,5 +309,16 @@ SLACK_CONNECTOR=slack/deskmate
     .map(([name, c]) => `# ${name}\n${c.env}_MCP_URL=\n${c.env}_MCP_TOKEN=`);
 
   const body = blocks.length ? `\n\n${blocks.join("\n\n")}` : "";
-  return `${preamble}${body}\n`;
+
+  // Only surface DATABASE_URL when ≥1 deskmate opts into memory — the store falls
+  // back to an ephemeral in-memory adapter without it, so it's noise otherwise.
+  const anyMemory = Object.values(team.deskmates).some((d) => d.memory);
+  const memory = anyMemory
+    ? `\n\n# ── Deskmate memory (cross-thread recall) ─────────────────────────────────
+# Persist deskmate memory across threads. Unset = ephemeral in-memory (dev only).
+# Provision a Postgres via the Vercel Marketplace (Neon) and paste its URL here.
+# DATABASE_URL=postgres://...`
+    : "";
+
+  return `${preamble}${body}${memory}\n`;
 }

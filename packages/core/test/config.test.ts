@@ -106,3 +106,24 @@ describe("defineTeam", () => {
     })).toThrow();
   });
 });
+
+const base = { role: "cs", emoji: ":x:", displayName: "CS", summary: "s" };
+
+describe("memory config", () => {
+  it("normalizes memory:true to defaults", () => {
+    const t = defineTeam({ deskmates: { cs: { ...base, memory: true } } });
+    expect(t.deskmates.cs.memory).toEqual({ maxItems: 200, coreLimit: 25 });
+  });
+  it("leaves memory undefined when absent", () => {
+    const t = defineTeam({ deskmates: { cs: { ...base } } });
+    expect(t.deskmates.cs.memory).toBeUndefined();
+  });
+  it("treats memory:false as off (undefined)", () => {
+    const t = defineTeam({ deskmates: { cs: { ...base, memory: false } } });
+    expect(t.deskmates.cs.memory).toBeUndefined();
+  });
+  it("honors explicit maxItems/coreLimit", () => {
+    const t = defineTeam({ deskmates: { cs: { ...base, memory: { maxItems: 50 } } } });
+    expect(t.deskmates.cs.memory).toEqual({ maxItems: 50, coreLimit: 25 });
+  });
+});
