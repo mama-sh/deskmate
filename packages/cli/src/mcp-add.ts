@@ -71,6 +71,7 @@ export function scaffoldConnectConnection(
     `${spec.name}: already in connections`,
   );
   console.log(`  provision it with \`deskmate connect ${spec.name}\`.`);
+  console.log("  the generated file imports @vercel/connect — install it in this app if it isn't already: `pnpm add @vercel/connect`.");
 }
 
 /**

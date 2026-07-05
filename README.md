@@ -239,7 +239,9 @@ deploy; the starter does this.)
 
 Some MCP servers (e.g. Vercel, Neon) are OAuth-only. Deskmate supports them with
 **app-scoped Vercel Connect** — the deskmate acts as itself (non-interactive), so
-there's no per-user consent step. `@vercel/connect` is already a dependency.
+there's no per-user consent step. The generated connection file imports
+`@vercel/connect` directly, so your app must have it as a direct dependency — the
+starter already does; otherwise run `pnpm add @vercel/connect`.
 
 1. Scaffold: `deskmate mcp-add vercel` → choose **oauth**, give the MCP URL, the
    Connect service id, and the connector UID (e.g. `mcp.vercel.com/deskmate`). The

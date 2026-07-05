@@ -1,6 +1,6 @@
 # OAuth MCP Connections Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers-extended-cc:executing-plans to implement this plan task-by-task.
+> **Implementation note:** execute this plan task-by-task (TDD, commit after each task).
 
 **Goal:** Let a deskmate team declare app-scoped OAuth (Vercel Connect) MCP connections in `deskmate.config.ts`, scaffold them with `deskmate mcp-add`, and provision them with a new `deskmate connect` command.
 
