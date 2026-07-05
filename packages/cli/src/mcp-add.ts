@@ -62,7 +62,7 @@ export function scaffoldConnectConnection(
   writeFileSync(file, renderConnectConnection(spec));
   console.log(`✓ created connections/${spec.name}.ts`);
 
-  const entry = { kind: "mcp", connect: spec.connector, service: spec.service };
+  const entry = { kind: "mcp", connect: spec.connector, service: spec.service || undefined };
   editConfig(
     cwd,
     spec.name,

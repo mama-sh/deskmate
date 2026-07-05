@@ -47,6 +47,18 @@ describe("scaffoldConnectConnection", () => {
     expect(src).toContain('service: "mcp.vercel.com"');
   });
 
+  it("omits `service` from the config entry when it is empty", () => {
+    const cfg = join(dir, "deskmate.config.ts");
+    writeFileSync(
+      cfg,
+      `import { defineTeam } from "@deskmate/core";\nexport default defineTeam({\n  connections: {\n  },\n  deskmates: {},\n});\n`,
+    );
+    scaffoldConnectConnection({ ...spec, service: "" }, dir);
+    const src = readFileSync(cfg, "utf8");
+    expect(src).toContain('connect: "vercel/deskmate"');
+    expect(src).not.toContain("service:");
+  });
+
   it("never clobbers an existing connection file", () => {
     scaffoldConnectConnection(spec, dir); // creates connections/vercel.ts
     const file = join(dir, "connections", "vercel.ts");
