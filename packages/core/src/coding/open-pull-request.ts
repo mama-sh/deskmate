@@ -13,9 +13,15 @@ export interface SubmitInput {
   allowlist: string[]; // owner/name globs the deskmate may touch
 }
 
+export interface GitResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
 export interface SubmitDeps {
-  /** Run a git command in the sandbox working tree; returns stdout/stderr. */
-  runGit: (command: string) => Promise<{ stdout: string; stderr: string }>;
+  /** Run a git command in the sandbox working tree; returns stdout/stderr/exitCode. */
+  runGit: (command: string) => Promise<GitResult>;
   /** Open a PR via the GitHub API (installation-token auth), returns its url. */
   openPr: (a: { repo: string; head: string; base: string; title: string; body: string }) => Promise<{ url: string }>;
 }
@@ -23,6 +29,9 @@ export interface SubmitDeps {
 // A pushable feature branch: the deskmate/<id>/<slug> convention, safe chars only
 // (used verbatim in a shell `git push`, so this doubles as an injection guard).
 const SAFE_FEATURE_BRANCH = /^deskmate\/[A-Za-z0-9._/-]+$/;
+// owner/name, safe chars only, exactly two segments (rejects path traversal like
+// "acme/api/../evil" and any shell metacharacters, defense-in-depth).
+const SAFE_REPO = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
 /** owner/name glob match: "acme/*" (any repo in owner) or "acme/api" (exact). */
 function repoAllowed(repo: string, allowlist: string[]): boolean {
@@ -35,11 +44,19 @@ function repoAllowed(repo: string, allowlist: string[]): boolean {
   });
 }
 
+/** Extract owner/name from a github remote url (https or ssh form), else null. */
+export function parseGithubRepo(url: string): string | null {
+  const m = url.trim().match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?\/?$/i);
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
 /**
  * The single outbound, human-approved step: push an already-committed feature
  * branch and open a PR. Guards enforce the safety contract — never the default
- * branch, only a shell-safe deskmate/<id>/<slug> branch, only allowlisted repos —
- * and NEVER merges. Pure over injected `deps` so it unit-tests without git/GitHub.
+ * branch, only a shell-safe deskmate/<id>/<slug> branch, only allowlisted repos,
+ * and the push destination must be the approved repo (the sandbox `origin` is
+ * verified to match `input.repo`, so the human approving the call controls where
+ * the push actually lands). NEVER merges. Pure over injected `deps`.
  */
 export async function submitPullRequest(input: SubmitInput, deps: SubmitDeps): Promise<{ url: string }> {
   if (input.branch === input.base) {
@@ -48,10 +65,31 @@ export async function submitPullRequest(input: SubmitInput, deps: SubmitDeps): P
   if (!SAFE_FEATURE_BRANCH.test(input.branch)) {
     throw new Error(`branch "${input.branch}" must be a deskmate/<id>/<slug> feature branch (letters, digits, . _ / -)`);
   }
+  if (!SAFE_REPO.test(input.repo)) {
+    throw new Error(`repo "${input.repo}" must be a plain "owner/name" (letters, digits, . _ -)`);
+  }
   if (!repoAllowed(input.repo, input.allowlist)) {
     throw new Error(`repo "${input.repo}" is not in the coding allowlist (${input.allowlist.join(", ") || "none"})`);
   }
-  await deps.runGit(`git push -u origin ${input.branch}`);
+  // Bind the push to the approved repo: `git push origin` lands on whatever the
+  // sandbox `origin` points at (set by the model's clone), so verify it IS the
+  // approved repo before pushing — otherwise a model could clone repo A, approve a
+  // call naming repo B, and push to A. This closes that confused-deputy gap.
+  const originRes = await deps.runGit("git remote get-url origin");
+  if (originRes.exitCode !== 0) {
+    throw new Error(`could not read the sandbox git remote 'origin' (${originRes.stderr.trim() || `exit ${originRes.exitCode}`})`);
+  }
+  const originRepo = parseGithubRepo(originRes.stdout);
+  if (!originRepo || originRepo.toLowerCase() !== input.repo.toLowerCase()) {
+    throw new Error(
+      `sandbox origin (${originRepo ?? (originRes.stdout.trim() || "unknown")}) does not match the approved repo ` +
+        `"${input.repo}" — refusing to push`,
+    );
+  }
+  const pushRes = await deps.runGit(`git push -u origin ${input.branch}`);
+  if (pushRes.exitCode !== 0) {
+    throw new Error(`git push failed: ${pushRes.stderr.trim() || `exit ${pushRes.exitCode}`}`);
+  }
   const pr = await deps.openPr({
     repo: input.repo,
     head: input.branch,
@@ -94,7 +132,7 @@ export function createOpenPullRequestTool(opts: OpenPullRequestToolOptions) {
       const deps: SubmitDeps = {
         runGit: async (command) => {
           const r = await sandbox.run({ command });
-          return { stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+          return { stdout: r.stdout ?? "", stderr: r.stderr ?? "", exitCode: r.exitCode ?? 0 };
         },
         openPr: async (a) => {
           const env = readGithubAppEnv();

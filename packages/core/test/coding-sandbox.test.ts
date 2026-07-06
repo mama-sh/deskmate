@@ -49,6 +49,12 @@ describe("createCodingSandbox", () => {
     }
   });
 
+  it("skips brokering (applies no policy) when no install token is available (local dev)", async () => {
+    const def = createCodingSandbox({ org: "acme", getToken: async () => null });
+    const policies = await capturePolicies(def);
+    expect(policies).toEqual([]);
+  });
+
   it("configures a backend", () => {
     const def = createCodingSandbox({ org: "acme", getToken: async () => "t" });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

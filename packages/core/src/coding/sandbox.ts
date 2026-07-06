@@ -4,8 +4,12 @@ import { getInstallationToken, readGithubAppEnv } from "./github-app.js";
 export interface CodingSandboxOptions {
   /** The single GitHub org whose installation token is brokered for git. */
   org: string;
-  /** Test seam; defaults to minting an installation token for `org` from the App env. */
-  getToken?: () => Promise<string>;
+  /**
+   * Test seam. Defaults to minting an installation token for `org` from the App
+   * env, or `null` when the App isn't configured (local dev) — in which case there
+   * is nothing to broker and egress is left at the backend default.
+   */
+  getToken?: () => Promise<string | null>;
 }
 
 /**
@@ -32,6 +36,9 @@ export function createCodingSandbox(opts: CodingSandboxOptions) {
     opts.getToken ??
     (async () => {
       const env = readGithubAppEnv();
+      // No App creds (local dev): don't mint — there's nothing to broker, and
+      // calling GitHub with empty creds would throw and crash onSession.
+      if (!env.present) return null;
       return getInstallationToken({ appId: env.appId, privateKey: env.privateKey, org: opts.org });
     });
 
@@ -40,6 +47,12 @@ export function createCodingSandbox(opts: CodingSandboxOptions) {
     async onSession({ use }) {
       const token = await getToken();
       const sandbox = await use();
+      if (!token) {
+        // App not configured (local dev). Nothing to broker; leave egress at the
+        // backend default. Cloning/pushing private repos needs the App + Vercel
+        // backend (documented) — this keeps `deskmate dev` from crashing.
+        return;
+      }
       const brokered = [{ transform: [{ headers: { authorization: basicInstallationAuth(token) } }] }];
       const policy = {
         allow: {
