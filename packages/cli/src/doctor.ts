@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { loadTeam as realLoadTeam } from "./lib/load-config.js";
 import { probeMcp } from "./lib/mcp-probe.js";
+import { getInstallationToken, readGithubAppEnv } from "@deskmate/core/coding";
 import type { TeamConfig } from "@deskmate/core";
 import type { ProbeResult } from "./lib/mcp-probe.js";
 
@@ -18,6 +19,8 @@ export interface DoctorDeps {
   probe: (url: string, headers: Record<string, string>) => Promise<ProbeResult>;
   /** Load the pulled Vercel env into process.env; returns the file loaded, or null. */
   loadEnv: (cwd: string) => string | null;
+  /** Best-effort: verify the GitHub App can mint an install token for a coding org. */
+  checkCodingAuth: (org: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 /**
@@ -122,11 +125,28 @@ async function resolveConnectionReal(name: string, cwd: string): Promise<Resolve
   return { kind: "ready", url, headers, allow };
 }
 
+/**
+ * Best-effort GitHub App readiness for a coding org: env present, then actually mint
+ * an installation token (which also proves the App is installed on the org and the
+ * private key parses). Never throws — a failure is reported, not fatal.
+ */
+async function checkCodingAuthReal(org: string): Promise<{ ok: boolean; error?: string }> {
+  const env = readGithubAppEnv();
+  if (!env.present) return { ok: false, error: "set GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY" };
+  try {
+    await getInstallationToken({ appId: env.appId, privateKey: env.privateKey, org });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 const defaultDeps: DoctorDeps = {
   loadTeam: realLoadTeam,
   resolveConnection: resolveConnectionReal,
   probe: (url, headers) => probeMcp(url, headers),
   loadEnv: loadLocalEnv,
+  checkCodingAuth: checkCodingAuthReal,
 };
 
 const ok = (s: string) => console.log(`  ✓ ${s}`);
@@ -149,12 +169,11 @@ export async function doctor(_args: string[] = [], cwd: string = process.cwd(), 
 
   const team = await deps.loadTeam(cwd);
   const names = Object.keys(team.connections);
+  let failures = 0;
+
   if (names.length === 0) {
     console.log("No connections configured.");
-    return 0;
   }
-
-  let failures = 0;
   for (const name of names) {
     const conn = team.connections[name]!;
     console.log(`\n${name}:`);
@@ -224,6 +243,31 @@ export async function doctor(_args: string[] = [], cwd: string = process.cwd(), 
     }
   }
 
-  console.log(failures ? `\n✗ ${failures} connection(s) need attention.` : "\n✓ all connections healthy.");
+  // Coding deskmates — validate the GitHub App is configured + installed on the org.
+  // Runs regardless of connections (a coding-only team may have none).
+  const codingDeskmates = Object.entries(team.deskmates).filter(([, d]) => d.coding);
+  if (codingDeskmates.length > 0) {
+    console.log(`\nCoding (GitHub App):`);
+    if (!team.github) {
+      // defineTeam guarantees github when coding is set; defensive for a hand-built team.
+      bad("coding is enabled but no `github` block is configured.");
+      failures++;
+    } else {
+      const res = await deps.checkCodingAuth(team.github.org);
+      if (res.ok) {
+        ok(`GitHub App ready — can mint an installation token for ${team.github.org}.`);
+        for (const [id, d] of codingDeskmates) {
+          const repos = d.coding!.repos.length ? d.coding!.repos.join(", ") : `${team.github.org}/*`;
+          ok(`${id}: coding enabled (repos: ${repos}).`);
+        }
+        warn("pushing needs the Vercel backend (local Docker can't broker the token); protect your default branch.");
+      } else {
+        bad(`GitHub App not ready for ${team.github.org}: ${res.error}`);
+        failures++;
+      }
+    }
+  }
+
+  console.log(failures ? `\n✗ ${failures} check(s) need attention.` : "\n✓ all checks healthy.");
   return failures ? 1 : 0;
 }

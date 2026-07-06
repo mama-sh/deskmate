@@ -15,6 +15,7 @@ function deps(over: Partial<DoctorDeps>): DoctorDeps {
     resolveConnection: async () => ({ kind: "not-found" }),
     probe: async () => ({ reachable: true, authOk: true, tools: [] }),
     loadEnv: () => null, // hermetic: never touch the real filesystem env in unit tests
+    checkCodingAuth: async () => ({ ok: true }),
     ...over,
   };
 }
@@ -110,6 +111,49 @@ describe("doctor", () => {
       resolveConnection: async () => { throw new Error("import blew up"); },
     });
     await expect(doctor([], "/proj", d)).resolves.toBe(1);
+  });
+});
+
+describe("doctor coding readiness", () => {
+  const codingTeam = (over: Record<string, unknown> = {}) =>
+    ({
+      connections: {},
+      github: { org: "acme" },
+      deskmates: { engineer: { role: "engineer", coding: { repos: ["acme/*"] } } },
+      channels: {},
+      ...over,
+    }) as any;
+
+  it("exits 0 when the GitHub App can mint a token for the org", async () => {
+    const d = deps({ loadTeam: async () => codingTeam(), checkCodingAuth: async () => ({ ok: true }) });
+    expect(await doctor([], "/proj", d)).toBe(0);
+  });
+
+  it("exits 1 when the GitHub App can't mint a token (missing env / not installed)", async () => {
+    const d = deps({
+      loadTeam: async () => codingTeam(),
+      checkCodingAuth: async () => ({ ok: false, error: "set GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY" }),
+    });
+    expect(await doctor([], "/proj", d)).toBe(1);
+  });
+
+  it("exits 1 when coding is enabled but no github block is configured", async () => {
+    const d = deps({ loadTeam: async () => codingTeam({ github: undefined }), checkCodingAuth: async () => ({ ok: true }) });
+    expect(await doctor([], "/proj", d)).toBe(1);
+  });
+
+  it("checks coding readiness even when there are no MCP connections", async () => {
+    const called = vi.fn(async () => ({ ok: true as const }));
+    const d = deps({ loadTeam: async () => codingTeam(), checkCodingAuth: called });
+    expect(await doctor([], "/proj", d)).toBe(0);
+    expect(called).toHaveBeenCalledWith("acme");
+  });
+
+  it("does not run the coding check for a team with no coding deskmates", async () => {
+    const called = vi.fn(async () => ({ ok: true as const }));
+    const d = deps({ loadTeam: async () => team({ good: { kind: "mcp", env: "GOOD" } }), checkCodingAuth: called });
+    await doctor([], "/proj", d);
+    expect(called).not.toHaveBeenCalled();
   });
 });
 
