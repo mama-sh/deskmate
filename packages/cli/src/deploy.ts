@@ -27,6 +27,25 @@ const defaultDeps: DeployDeps = {
 };
 
 /**
+ * Drop target/prebuilt flags from passthrough args for the SOURCE provisioning deploy.
+ * The provisioning deploy must stay an unaliased preview built from source — a leaked
+ * `--prod`/`--target` would ship the un-patched (trace-broken) build to production, and
+ * `--prebuilt` would defeat the whole point (no on-Vercel build → no prewarm). Auth/scope
+ * flags (`--yes`, `--token`, `--scope`) pass through untouched.
+ */
+function provisionArgs(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--prod" || a === "--prebuilt") continue;
+    if (a === "--target" || a === "-t") { i++; continue; } // skip the flag AND its value
+    if (a.startsWith("--target=")) continue;
+    out.push(a);
+  }
+  return out;
+}
+
+/**
  * `deskmate deploy [...vercel-deploy-args]`: the known-good recipe to ship an eve
  * team to Vercel production.
  *
@@ -73,7 +92,7 @@ export async function deploy(
   const team = await deps.loadTeam(cwd);
   const hasCoding = Object.values(team.deskmates).some((d) => d.coding);
   if (hasCoding) {
-    const provisionCode = await deps.run("vercel", ["deploy", ...args], cwd, {
+    const provisionCode = await deps.run("vercel", ["deploy", ...provisionArgs(args)], cwd, {
       VERCEL_USE_EXPERIMENTAL_FRAMEWORKS: "1",
     });
     // A non-zero exit means the on-Vercel build failed — abort rather than ship a coding bot

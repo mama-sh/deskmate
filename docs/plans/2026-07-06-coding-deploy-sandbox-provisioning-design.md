@@ -51,8 +51,8 @@ coding deskmate.
    code), so MVP prints a one-line note instead of auto-removing. Auto-cleanup is a follow-up.
 4. **File the eve trace-gap issue (Option C) with the handoff's documented evidence.** A live
    re-repro needs a Vercel deploy not available on this machine, so the issue cites the
-   handoff's captured `FUNCTION_INVOCATION_FAILED` / prewarm-gate evidence. Drafted and shown
-   before posting (outward-facing, third-party repo).
+   handoff's captured `FUNCTION_INVOCATION_FAILED` / prewarm-gate evidence, repro-honest.
+   **Filed: https://github.com/vercel/eve/issues/556** (matched eve's `bug_report.yml`).
 
 ## Design
 
