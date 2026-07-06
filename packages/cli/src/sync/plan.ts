@@ -13,6 +13,9 @@ import {
   renderMemoryReflectionSchedule,
   renderMemoryTool,
   renderReexport,
+  renderCodingInstructions,
+  renderCodingSandbox,
+  renderCodingTool,
   renderRootAgent,
   renderRosterRegistry,
   renderSlackAmbientChannel,
@@ -179,6 +182,19 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
         out(`agent/subagents/${id}/tools/${tool}.ts`, renderMemoryTool(id, tool));
       }
       out(`agent/subagents/${id}/instructions/memory.ts`, renderMemoryInstructions(id, d.memory.coreLimit));
+    }
+
+    // Agentic-coding capability — ONLY for a deskmate that opts into `coding` (and
+    // whose team declares `github`; defineTeam guarantees the pair). Emits the
+    // deskmate's own sandbox (brokers the org's install token + locks egress), the
+    // approval-gated push+PR tool, and the coding safety-rules instructions module.
+    // All logic lives in @deskmate/core/coding; the shims bind it by id + org + repos.
+    // Turning `coding` off simply stops emitting these (sync wipes the subagent dir first).
+    if (d.coding && team.github) {
+      const coding = { org: team.github.org, repos: d.coding.repos };
+      out(`agent/subagents/${id}/sandbox.ts`, renderCodingSandbox(coding));
+      out(`agent/subagents/${id}/tools/open_pull_request.ts`, renderCodingTool(id, coding));
+      out(`agent/subagents/${id}/instructions/coding.ts`, renderCodingInstructions());
     }
   }
 
