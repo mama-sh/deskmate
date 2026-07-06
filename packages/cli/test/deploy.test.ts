@@ -2,13 +2,14 @@ import { describe, it, expect, vi } from "vitest";
 import type { TeamConfig } from "@deskmate/core";
 import { deploy, runCommand, type DeployDeps } from "../src/deploy.js";
 
-function makeDeps(runCodes: number[] = [0, 0], opts: { coding?: boolean } = {}) {
+function makeDeps(runCodes: number[] = [0, 0], opts: { coding?: boolean; channel?: boolean } = {}) {
   const calls: string[] = [];
   const queue = [...runCodes];
   // loadTeam is a read (not an ordered side effect), so it does NOT push to `calls` —
-  // the existing sequence assertions stay valid for a non-coding team.
+  // the existing sequence assertions stay valid for a non-sandbox team.
   const team = {
     deskmates: opts.coding ? { engineer: { coding: { repos: [] } } } : { devops: {} },
+    github: opts.channel ? { org: "acme", channel: true } : undefined,
   } as unknown as TeamConfig;
   const deps: DeployDeps = {
     loadTeam: vi.fn(async () => team),
@@ -55,6 +56,19 @@ describe("deploy", () => {
       "patch",
       "run:vercel deploy --prebuilt --prod --yes",
     ]);
+  });
+
+  it("github-channel-only team (no coding deskmate): also provisions + reminds", async () => {
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((m?: unknown) => {
+      logs.push(String(m));
+    });
+    const { deps, calls } = makeDeps([0, 0, 0, 0], { channel: true }); // pull, provision, build, deploy
+    const code = await deploy([], "/proj", deps);
+    spy.mockRestore();
+    expect(code).toBe(0);
+    expect(calls).toContain("run:vercel deploy [xfw]"); // source provisioning still runs
+    expect(logs.join("\n")).toMatch(/GITHUB_APP_ID/);
   });
 
   it("coding team: strips --prod/--target/--prebuilt from the SOURCE provision deploy", async () => {

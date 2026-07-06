@@ -91,8 +91,11 @@ export async function deploy(
   // prewarms the team-scoped templates — then the prebuilt prod deploy below resolves them by
   // content hash. Non-coding teams have no sandboxes and skip this entirely.
   const team = await deps.loadTeam(cwd);
-  const hasCoding = Object.values(team.deskmates).some((d) => d.coding);
-  if (hasCoding) {
+  // A coding deskmate has its own sandbox; the root GitHub channel (github.channel) also
+  // checks issue/PR repos out into a sandbox. Either means eve has sandbox templates to
+  // prewarm — provision for both, consistent with `deskmate doctor`'s github-readiness gate.
+  const usesSandbox = Object.values(team.deskmates).some((d) => d.coding) || team.github?.channel === true;
+  if (usesSandbox) {
     const provisionCode = await deps.run("vercel", ["deploy", ...provisionArgs(args)], cwd, {
       VERCEL_USE_EXPERIMENTAL_FRAMEWORKS: "1",
     });
@@ -114,10 +117,11 @@ export async function deploy(
   console.log(`✓ eve-trace: patched ${patched.length} function bundle(s)`);
 
   const deployCode = await deps.run("vercel", ["deploy", "--prebuilt", "--prod", ...args], cwd);
-  if (deployCode === 0 && hasCoding) {
+  if (deployCode === 0 && usesSandbox) {
     console.log(
-      "\nℹ coding deskmate deployed. Set GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY / GITHUB_APP_ORG " +
-        "in the deploy env, or the clone/PR steps stay unauthenticated. Verify readiness with `deskmate doctor`.",
+      "\nℹ deployed a deskmate that uses a sandbox (coding and/or the GitHub channel). Set the " +
+        "GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY / GITHUB_APP_ORG env (plus GITHUB_WEBHOOK_SECRET / " +
+        "GITHUB_APP_SLUG for the channel), or GitHub auth won't work. Verify with `deskmate doctor`.",
     );
   }
   return deployCode;
