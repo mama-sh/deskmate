@@ -420,7 +420,14 @@ GITHUB_APP_ID=
 GITHUB_APP_PRIVATE_KEY=
 GITHUB_APP_ORG=${team.github?.org ?? ""}
 # Only for the Phase-2 GitHub channel (@mentions on issues/PRs):
-GITHUB_WEBHOOK_SECRET=
+GITHUB_WEBHOOK_SECRET=${
+        team.github?.channel
+          ? `
+# The App slug (from github.com/apps/<slug>) — the GitHub channel uses it to decide
+# which @mentions to answer:
+GITHUB_APP_SLUG=`
+          : ""
+      }
 # Local-only read/explore fallback (Docker can't broker the App token). NOT for production:
 # GITHUB_TOKEN=`
     : "";

@@ -407,14 +407,18 @@ describe("coding renderers", () => {
     expect(s).toContain("GITHUB_APP_ORG=acme");
     expect(s).toContain("GITHUB_WEBHOOK_SECRET");
     expect(s).toContain("GITHUB_TOKEN"); // commented local-only fallback
+    expect(s).not.toContain("GITHUB_APP_SLUG"); // slug is channel-only, no channel here
+    // the GITHUB_TOKEN comment line must not carry a stray template backtick
+    expect(s.split("\n").find((l) => l.includes("GITHUB_TOKEN"))?.trimEnd().endsWith("`")).toBe(false);
 
     expect(renderEnvExample(fixtureTeam)).not.toContain("GITHUB_APP_ID");
   });
 
-  it("includes GITHUB_APP_* when only the github channel is enabled (no coding deskmate)", () => {
+  it("scaffolds GITHUB_APP_SLUG + the App env when the github channel is enabled", () => {
     const channelOnly = { ...fixtureTeam, github: { org: "acme", channel: true } } as unknown as TeamConfig;
     const s = renderEnvExample(channelOnly);
     expect(s).toContain("GITHUB_APP_ID");
     expect(s).toContain("GITHUB_WEBHOOK_SECRET");
+    expect(s).toContain("GITHUB_APP_SLUG"); // needed for @mention dispatch
   });
 });

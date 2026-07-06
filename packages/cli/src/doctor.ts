@@ -243,11 +243,13 @@ export async function doctor(_args: string[] = [], cwd: string = process.cwd(), 
     }
   }
 
-  // Coding deskmates — validate the GitHub App is configured + installed on the org.
-  // Runs regardless of connections (a coding-only team may have none).
+  // GitHub App readiness — validate whenever the App is used: a coding deskmate OR the
+  // root GitHub channel (a channel-only team has no coding deskmate but still needs the
+  // App + webhook secret). Runs regardless of connections.
   const codingDeskmates = Object.entries(team.deskmates).filter(([, d]) => d.coding);
-  if (codingDeskmates.length > 0) {
-    console.log(`\nCoding (GitHub App):`);
+  const usesGithub = codingDeskmates.length > 0 || team.github?.channel === true;
+  if (usesGithub) {
+    console.log(`\nCoding / GitHub App:`);
     if (!team.github) {
       // defineTeam guarantees github when coding is set; defensive for a hand-built team.
       bad("coding is enabled but no `github` block is configured.");
@@ -260,7 +262,20 @@ export async function doctor(_args: string[] = [], cwd: string = process.cwd(), 
           const repos = d.coding!.repos.length ? d.coding!.repos.join(", ") : `${team.github.org}/*`;
           ok(`${id}: coding enabled (repos: ${repos}).`);
         }
-        warn("pushing needs the Vercel backend (local Docker can't broker the token); protect your default branch.");
+        if (team.github.channel) {
+          if (process.env.GITHUB_WEBHOOK_SECRET) {
+            ok("GitHub channel: webhook secret set.");
+          } else {
+            bad("GitHub channel enabled but GITHUB_WEBHOOK_SECRET is not set — webhook deliveries will fail signature checks.");
+            failures++;
+          }
+          if (!process.env.GITHUB_APP_SLUG) {
+            warn("GITHUB_APP_SLUG not set — the channel may not know which @mentions to answer.");
+          }
+        }
+        if (codingDeskmates.length > 0) {
+          warn("pushing needs the Vercel backend (local Docker can't broker the token); protect your default branch.");
+        }
       } else {
         bad(`GitHub App not ready for ${team.github.org}: ${res.error}`);
         failures++;

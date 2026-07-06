@@ -155,6 +155,34 @@ describe("doctor coding readiness", () => {
     await doctor([], "/proj", d);
     expect(called).not.toHaveBeenCalled();
   });
+
+  const channelTeam = (over: Record<string, unknown> = {}) =>
+    ({ connections: {}, github: { org: "acme", channel: true }, deskmates: {}, channels: {}, ...over }) as any;
+
+  it("checks the App (and webhook secret) for a channel-only team with no coding deskmate", async () => {
+    const prev = process.env.GITHUB_WEBHOOK_SECRET;
+    process.env.GITHUB_WEBHOOK_SECRET = "whsec";
+    try {
+      const called = vi.fn(async () => ({ ok: true as const }));
+      const d = deps({ loadTeam: async () => channelTeam(), checkCodingAuth: called });
+      expect(await doctor([], "/proj", d)).toBe(0);
+      expect(called).toHaveBeenCalledWith("acme");
+    } finally {
+      if (prev === undefined) delete process.env.GITHUB_WEBHOOK_SECRET;
+      else process.env.GITHUB_WEBHOOK_SECRET = prev;
+    }
+  });
+
+  it("fails when the github channel is enabled but GITHUB_WEBHOOK_SECRET is missing", async () => {
+    const prev = process.env.GITHUB_WEBHOOK_SECRET;
+    delete process.env.GITHUB_WEBHOOK_SECRET;
+    try {
+      const d = deps({ loadTeam: async () => channelTeam(), checkCodingAuth: async () => ({ ok: true }) });
+      expect(await doctor([], "/proj", d)).toBe(1);
+    } finally {
+      if (prev !== undefined) process.env.GITHUB_WEBHOOK_SECRET = prev;
+    }
+  });
 });
 
 describe("loadLocalEnv", () => {
