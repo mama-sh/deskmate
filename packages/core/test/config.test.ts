@@ -165,3 +165,53 @@ describe("memory config", () => {
     expect(t.deskmates.cs.memory).toEqual({ maxItems: 50, coreLimit: 25 });
   });
 });
+
+describe("coding config", () => {
+  const eng = { ...base, role: "engineer" };
+
+  it("normalizes coding:true to a default (empty repos) object", () => {
+    const t = defineTeam({ github: { org: "acme" }, deskmates: { engineer: { ...eng, coding: true } } });
+    expect(t.deskmates.engineer.coding).toEqual({ repos: [] });
+  });
+
+  it("keeps an explicit coding.repos allowlist", () => {
+    const t = defineTeam({ github: { org: "acme" }, deskmates: { engineer: { ...eng, coding: { repos: ["acme/*"] } } } });
+    expect(t.deskmates.engineer.coding).toEqual({ repos: ["acme/*"] });
+  });
+
+  it("defaults coding:{} (object, repos omitted) to empty repos", () => {
+    const t = defineTeam({ github: { org: "acme" }, deskmates: { engineer: { ...eng, coding: {} } } });
+    expect(t.deskmates.engineer.coding).toEqual({ repos: [] });
+  });
+
+  it("rejects a coding.repos entry with no name part (owner only)", () => {
+    expect(() =>
+      defineTeam({ github: { org: "acme" }, deskmates: { engineer: { ...eng, coding: { repos: ["acme"] } } } }),
+    ).toThrow(/owner\/name|org "acme"/i);
+  });
+
+  it("treats coding:false as off (undefined)", () => {
+    const t = defineTeam({ github: { org: "acme" }, deskmates: { engineer: { ...eng, coding: false } } });
+    expect(t.deskmates.engineer.coding).toBeUndefined();
+  });
+
+  it("leaves coding undefined when omitted", () => {
+    const t = defineTeam({ deskmates: { engineer: { ...eng } } });
+    expect(t.deskmates.engineer.coding).toBeUndefined();
+  });
+
+  it("exposes the team github block", () => {
+    const t = defineTeam({ github: { org: "acme" }, deskmates: {} });
+    expect(t.github).toEqual({ org: "acme" });
+  });
+
+  it("rejects a coding deskmate when the team has no github block", () => {
+    expect(() => defineTeam({ deskmates: { engineer: { ...eng, coding: true } } })).toThrow(/github/i);
+  });
+
+  it("rejects a coding.repos entry outside the configured github.org", () => {
+    expect(() =>
+      defineTeam({ github: { org: "acme" }, deskmates: { engineer: { ...eng, coding: { repos: ["other/api"] } } } }),
+    ).toThrow(/single .*org|org "acme"/i);
+  });
+});
