@@ -11,6 +11,12 @@ export default defineTeam({
   // Models resolve through the Vercel AI Gateway.
   model: "anthropic/claude-sonnet-5",
 
+  // GitHub App wiring for coding deskmates (see the `engineer` entry below).
+  // Only the org lives here; the App secrets come from env (GITHUB_APP_ID /
+  // GITHUB_APP_PRIVATE_KEY). Uncomment + set your org to enable coding. Add
+  // `channel: true` to also mount eve's GitHub channel (@mentions on issues/PRs).
+  // github: { org: "your-org" /*, channel: true */ },
+
   // External data each deskmate can read. `kind: "mcp"` connections map to an
   // <ENV>_MCP_URL / <ENV>_MCP_TOKEN pair (see the generated .env.example).
   connections: {
@@ -48,6 +54,19 @@ export default defineTeam({
       voice: "Terse SRE. Leads with the punchline, shows the query he ran, flags risk plainly. Dry, not chatty.",
       reads: ["sentry"],
     },
+    // A coding deskmate: clones a repo, makes a scoped change on a branch, and opens
+    // a PR (never the default branch, never merges). Requires the `github` block above
+    // + the GITHUB_APP_* env. `coding.repos` is the allowlist (globs within github.org).
+    // engineer: {
+    //   role: "engineer",
+    //   emoji: ":technologist:",
+    //   displayName: "Software Engineer",
+    //   summary:
+    //     "Clones a repo, makes a scoped change on a branch, and opens a PR — never pushes to default, never merges.",
+    //   voice: "Pragmatic senior engineer. States the plan in one line, keeps the diff minimal, links the PR.",
+    //   reads: [],
+    //   coding: { repos: ["your-org/*"] },
+    // },
   },
 
   // Proactive watching is opt-in per channel. Uncomment and set a real Slack channel id

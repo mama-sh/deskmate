@@ -13,6 +13,10 @@ import {
   renderMemoryReflectionSchedule,
   renderMemoryTool,
   renderReexport,
+  renderCodingInstructions,
+  renderCodingSandbox,
+  renderCodingTool,
+  renderGithubChannel,
   renderRootAgent,
   renderRosterRegistry,
   renderSlackAmbientChannel,
@@ -180,6 +184,19 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
       }
       out(`agent/subagents/${id}/instructions/memory.ts`, renderMemoryInstructions(id, d.memory.coreLimit));
     }
+
+    // Agentic-coding capability — ONLY for a deskmate that opts into `coding` (and
+    // whose team declares `github`; defineTeam guarantees the pair). Emits the
+    // deskmate's own sandbox (brokers the org's install token + locks egress), the
+    // approval-gated push+PR tool, and the coding safety-rules instructions module.
+    // All logic lives in @deskmate/core/coding; the shims bind it by id + org + repos.
+    // Turning `coding` off simply stops emitting these (sync wipes the subagent dir first).
+    if (d.coding && team.github) {
+      const coding = { org: team.github.org, repos: d.coding.repos };
+      out(`agent/subagents/${id}/sandbox.ts`, renderCodingSandbox(coding));
+      out(`agent/subagents/${id}/tools/open_pull_request.ts`, renderCodingTool(id, coding));
+      out(`agent/subagents/${id}/instructions/coding.ts`, renderCodingInstructions());
+    }
   }
 
   // ── Deletes: generated subagent dirs for deskmates no longer in the config ──
@@ -202,6 +219,17 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
       );
     }
   }
+  // ── Phase-2 GitHub channel (root-only) ──────────────────────────────────────
+  // Mounted when `github.channel` is set: @mentions on issues/PRs get an eve
+  // auto-checkout + commit/push with the firewall-brokered install token. sync OWNS
+  // agent/**, so when the flag is off we DELETE any previously generated channel file.
+  const githubChannelPath = join(cwd, "agent", "channels", "github.ts");
+  if (team.github?.channel) {
+    out("agent/channels/github.ts", renderGithubChannel());
+  } else if (existsSync(githubChannelPath)) {
+    deletes.push(githubChannelPath);
+  }
+
   const sweepPath = join(cwd, "agent", "schedules", "deskmate-sweep.ts");
   if (digestChannels.some(([, r]) => r.watch?.post === true)) {
     out("agent/schedules/deskmate-sweep.ts", renderDeskmateSweepSchedule(team));

@@ -18,6 +18,10 @@ import {
   renderMemoryTool,
   renderMemoryInstructions,
   renderMemoryReflectionSchedule,
+  renderCodingSandbox,
+  renderCodingTool,
+  renderCodingInstructions,
+  renderGithubChannel,
 } from "../src/sync/render.js";
 
 // A minimal, hand-built TeamConfig fixture (two deskmates, two mcp connections).
@@ -346,5 +350,76 @@ describe("renderStubConnection", () => {
     expect(out).toContain('auth: connect({ connector: "vercel/deskmate", principalType: "app" })');
     expect(out).not.toContain("process.env");
     expect(out).toContain("deskmate connect vercel");
+  });
+});
+
+describe("coding renderers", () => {
+  it("renders a sandbox shim bound to the team org + repo allowlist", () => {
+    const s = renderCodingSandbox({ org: "acme", repos: ["acme/*"] });
+    expect(s).toContain(BANNER);
+    expect(s).toContain('from "@deskmate/core/coding"');
+    expect(s).toContain("createCodingSandbox");
+    expect(s).toContain('"acme"');
+    expect(s).toContain('"acme/*"'); // repos threaded through for read-token scoping
+  });
+
+  it("renders the open_pull_request tool shim bound to id/org/repos", () => {
+    const t = renderCodingTool("engineer", { org: "acme", repos: ["acme/*"] });
+    expect(t).toContain("createOpenPullRequestTool");
+    expect(t).toContain('"engineer"');
+    expect(t).toContain('"acme"');
+    expect(t).toContain('"acme/*"');
+    expect(t).toContain("export default");
+  });
+
+  it("renders the static coding instructions module", () => {
+    const i = renderCodingInstructions();
+    expect(i).toContain('from "eve/instructions"');
+    expect(i).toContain("defineInstructions");
+    expect(i).toContain("createCodingInstructions");
+  });
+
+  it("renders the root github channel shim", () => {
+    const c = renderGithubChannel();
+    expect(c).toContain(BANNER);
+    expect(c).toContain('from "eve/channels/github"');
+    expect(c).toContain("githubChannel()");
+    expect(c).toContain("export default");
+  });
+
+  it("includes GITHUB_APP_* in .env.example only when a deskmate has coding", () => {
+    const withCoding = {
+      ...fixtureTeam,
+      github: { org: "acme" },
+      deskmates: {
+        eng: {
+          role: "engineer",
+          emoji: ":technologist:",
+          displayName: "Software Engineer",
+          summary: "s",
+          reads: [],
+          coding: { repos: ["acme/*"] },
+        },
+      },
+    } as unknown as TeamConfig;
+    const s = renderEnvExample(withCoding);
+    expect(s).toContain("GITHUB_APP_ID");
+    expect(s).toContain("GITHUB_APP_PRIVATE_KEY");
+    expect(s).toContain("GITHUB_APP_ORG=acme");
+    expect(s).toContain("GITHUB_WEBHOOK_SECRET");
+    expect(s).toContain("GITHUB_TOKEN"); // commented local-only fallback
+    expect(s).not.toContain("GITHUB_APP_SLUG"); // slug is channel-only, no channel here
+    // the GITHUB_TOKEN comment line must not carry a stray template backtick
+    expect(s.split("\n").find((l) => l.includes("GITHUB_TOKEN"))?.trimEnd().endsWith("`")).toBe(false);
+
+    expect(renderEnvExample(fixtureTeam)).not.toContain("GITHUB_APP_ID");
+  });
+
+  it("scaffolds GITHUB_APP_SLUG + the App env when the github channel is enabled", () => {
+    const channelOnly = { ...fixtureTeam, github: { org: "acme", channel: true } } as unknown as TeamConfig;
+    const s = renderEnvExample(channelOnly);
+    expect(s).toContain("GITHUB_APP_ID");
+    expect(s).toContain("GITHUB_WEBHOOK_SECRET");
+    expect(s).toContain("GITHUB_APP_SLUG"); // needed for @mention dispatch
   });
 });

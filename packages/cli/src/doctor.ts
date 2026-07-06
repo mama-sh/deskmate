@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { loadTeam as realLoadTeam } from "./lib/load-config.js";
 import { probeMcp } from "./lib/mcp-probe.js";
+import { getInstallationToken, readGithubAppEnv } from "@deskmate/core/coding";
 import type { TeamConfig } from "@deskmate/core";
 import type { ProbeResult } from "./lib/mcp-probe.js";
 
@@ -18,6 +19,13 @@ export interface DoctorDeps {
   probe: (url: string, headers: Record<string, string>) => Promise<ProbeResult>;
   /** Load the pulled Vercel env into process.env; returns the file loaded, or null. */
   loadEnv: (cwd: string) => string | null;
+  /**
+   * Best-effort: verify the GitHub App can mint an install token for a coding org,
+   * scoped to `repositoryNames` when given (matches the repo-scoped token the sandbox
+   * / PR tool mint at runtime, so a repo-selective install that can't reach an exact
+   * allowlisted repo is caught here rather than at runtime).
+   */
+  checkCodingAuth: (org: string, repositoryNames?: string[]) => Promise<{ ok: boolean; error?: string }>;
 }
 
 /**
@@ -122,11 +130,37 @@ async function resolveConnectionReal(name: string, cwd: string): Promise<Resolve
   return { kind: "ready", url, headers, allow };
 }
 
+/**
+ * Best-effort GitHub App readiness for a coding org: env present, then actually mint
+ * an installation token (which also proves the App is installed on the org and the
+ * private key parses). Never throws — a failure is reported, not fatal.
+ */
+async function checkCodingAuthReal(org: string, repositoryNames?: string[]): Promise<{ ok: boolean; error?: string }> {
+  const env = readGithubAppEnv();
+  if (!env.present) return { ok: false, error: "set GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY" };
+  try {
+    // Request the SAME write permissions the PR tool uses at runtime — GitHub errors
+    // when you request permissions the installation wasn't granted, so a read-only App
+    // install fails here rather than on the first approved PR.
+    await getInstallationToken({
+      appId: env.appId,
+      privateKey: env.privateKey,
+      org,
+      repositoryNames,
+      permissions: { contents: "write", pull_requests: "write" },
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 const defaultDeps: DoctorDeps = {
   loadTeam: realLoadTeam,
   resolveConnection: resolveConnectionReal,
   probe: (url, headers) => probeMcp(url, headers),
   loadEnv: loadLocalEnv,
+  checkCodingAuth: checkCodingAuthReal,
 };
 
 const ok = (s: string) => console.log(`  ✓ ${s}`);
@@ -149,12 +183,11 @@ export async function doctor(_args: string[] = [], cwd: string = process.cwd(), 
 
   const team = await deps.loadTeam(cwd);
   const names = Object.keys(team.connections);
+  let failures = 0;
+
   if (names.length === 0) {
     console.log("No connections configured.");
-    return 0;
   }
-
-  let failures = 0;
   for (const name of names) {
     const conn = team.connections[name]!;
     console.log(`\n${name}:`);
@@ -224,6 +257,57 @@ export async function doctor(_args: string[] = [], cwd: string = process.cwd(), 
     }
   }
 
-  console.log(failures ? `\n✗ ${failures} connection(s) need attention.` : "\n✓ all connections healthy.");
+  // GitHub App readiness — validate whenever the App is used: a coding deskmate OR the
+  // root GitHub channel (a channel-only team has no coding deskmate but still needs the
+  // App + webhook secret). Runs regardless of connections.
+  const codingDeskmates = Object.entries(team.deskmates).filter(([, d]) => d.coding);
+  const usesGithub = codingDeskmates.length > 0 || team.github?.channel === true;
+  if (usesGithub) {
+    console.log(`\nCoding / GitHub App:`);
+    if (!team.github) {
+      // defineTeam guarantees github when coding is set; defensive for a hand-built team.
+      bad("coding is enabled but no `github` block is configured.");
+      failures++;
+    } else {
+      // Check the SAME repo-scoped token the runtime mints (exact allowlist entries),
+      // so a repo-selective App install that can't reach an allowlisted repo fails here
+      // rather than at clone/PR time. Owner-glob entries stay org-level.
+      const exactRepos = codingDeskmates
+        .flatMap(([, d]) => d.coding!.repos)
+        .filter((r) => !r.includes("*"))
+        .map((r) => r.split("/")[1])
+        .filter((n): n is string => Boolean(n));
+      const res = await deps.checkCodingAuth(team.github.org, exactRepos.length ? exactRepos : undefined);
+      if (res.ok) {
+        ok(`GitHub App ready — can mint an installation token for ${team.github.org}.`);
+        for (const [id, d] of codingDeskmates) {
+          const repos = d.coding!.repos.length ? d.coding!.repos.join(", ") : `${team.github.org}/*`;
+          ok(`${id}: coding enabled (repos: ${repos}).`);
+        }
+        if (team.github.channel) {
+          if (process.env.GITHUB_WEBHOOK_SECRET) {
+            ok("GitHub channel: webhook secret set.");
+          } else {
+            bad("GitHub channel enabled but GITHUB_WEBHOOK_SECRET is not set — webhook deliveries will fail signature checks.");
+            failures++;
+          }
+          if (process.env.GITHUB_APP_SLUG) {
+            ok("GitHub channel: app slug set (mention dispatch).");
+          } else {
+            bad("GitHub channel enabled but GITHUB_APP_SLUG is not set — the channel will ignore all @mentions.");
+            failures++;
+          }
+        }
+        if (codingDeskmates.length > 0) {
+          warn("pushing needs the Vercel backend (local Docker can't broker the token); protect your default branch.");
+        }
+      } else {
+        bad(`GitHub App not ready for ${team.github.org}: ${res.error}`);
+        failures++;
+      }
+    }
+  }
+
+  console.log(failures ? `\n✗ ${failures} check(s) need attention.` : "\n✓ all checks healthy.");
   return failures ? 1 : 0;
 }

@@ -282,6 +282,64 @@ describe("planSync", () => {
     }
   });
 
+  // A team where `devops` opts into coding (org acme, allowlist acme/*) and
+  // `product_analyst` does not. Coding requires the team `github` block.
+  const codingTeam = {
+    ...fixtureTeam,
+    github: { org: "acme" },
+    deskmates: {
+      devops: { ...fixtureTeam.deskmates.devops, coding: { repos: ["acme/*"] } },
+      product_analyst: { ...fixtureTeam.deskmates.product_analyst },
+    },
+  } as unknown as TeamConfig;
+
+  it("emits the sandbox + open_pull_request + coding instructions for a coding deskmate", () => {
+    const plan = planSync(codingTeam, cwd);
+    const sandbox = find(plan, "agent/subagents/devops/sandbox.ts");
+    expect(sandbox?.contents).toContain('import { createCodingSandbox } from "@deskmate/core/coding";');
+    expect(sandbox?.contents).toContain('"acme"');
+    const tool = find(plan, "agent/subagents/devops/tools/open_pull_request.ts");
+    expect(tool?.contents).toContain("createOpenPullRequestTool");
+    expect(tool?.contents).toContain('"devops"');
+    expect(tool?.contents).toContain('"acme/*"');
+    const instr = find(plan, "agent/subagents/devops/instructions/coding.ts");
+    expect(instr?.contents).toContain("createCodingInstructions");
+  });
+
+  it("emits NONE of the coding slots for a deskmate without coding", () => {
+    const plan = planSync(codingTeam, cwd);
+    const ps = paths(plan);
+    for (const rel of [
+      "agent/subagents/product_analyst/sandbox.ts",
+      "agent/subagents/product_analyst/tools/open_pull_request.ts",
+      "agent/subagents/product_analyst/instructions/coding.ts",
+    ]) {
+      expect(ps).not.toContain(join(cwd, rel));
+    }
+  });
+
+  it("emits the root github channel when github.channel is set", () => {
+    const t = { ...fixtureTeam, github: { org: "acme", channel: true } } as unknown as TeamConfig;
+    const plan = planSync(t, cwd);
+    expect(find(plan, "agent/channels/github.ts")?.contents).toContain("githubChannel()");
+  });
+
+  it("does not emit the github channel without github.channel", () => {
+    const t = { ...fixtureTeam, github: { org: "acme" } } as unknown as TeamConfig;
+    expect(paths(planSync(t, cwd)).some((p) => p.endsWith("agent/channels/github.ts"))).toBe(false);
+  });
+
+  it("deletes a stale generated github channel when github.channel is off", () => {
+    const rel = "agent/channels/github.ts";
+    mkdirSync(join(cwd, "agent/channels"), { recursive: true });
+    writeFileSync(join(cwd, rel), "// stale\n");
+    try {
+      expect(planSync(fixtureTeam, cwd).deletes).toContain(join(cwd, rel));
+    } finally {
+      rmSync(join(cwd, rel), { force: true });
+    }
+  });
+
   it("emits the root reflection schedule exactly once with the enabled ids + configured cron", () => {
     const plan = planSync(memoryTeam, cwd);
     const sched = find(plan, "agent/schedules/memory-reflection.ts");

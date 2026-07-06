@@ -19,6 +19,13 @@ const MemorySetting = z.object({
   coreLimit: z.number().int().positive().default(25),
 });
 
+const CodingSetting = z.object({
+  // Repo allowlist as owner/name globs (e.g. "acme/*"). Empty = any repo in the
+  // team's github.org. Every entry must resolve to the single configured github.org
+  // (validated in defineTeam) so onSession can broker one installation token.
+  repos: z.array(z.string()).default([]),
+});
+
 const DeskmateConfig = z.object({
   role: z.string(),
   emoji: z.string(),
@@ -34,6 +41,14 @@ const DeskmateConfig = z.object({
   memory: z.union([z.boolean(), MemorySetting]).optional().transform((m) => {
     if (m === undefined || m === false) return undefined;
     return m === true ? MemorySetting.parse({}) : m;
+  }),
+  // Opt-in agentic-coding capability. `true` normalizes to the CodingSetting defaults
+  // (empty repos = any repo in the team's github.org); `false`/omitted stay off
+  // (undefined). An object opts in with a repo allowlist. Mirrors `memory` above; a
+  // coding deskmate requires the team's `github` block (validated in defineTeam).
+  coding: z.union([z.boolean(), CodingSetting]).optional().transform((c) => {
+    if (c === undefined || c === false) return undefined;
+    return c === true ? CodingSetting.parse({}) : c;
   }),
 });
 
@@ -68,6 +83,11 @@ const TeamConfig = z.object({
   // Team-level memory knob. `memory.reflect.cron` is consumed by `deskmate sync`, which
   // renders the nightly reflection ("dreaming") schedule's cron from it.
   memory: z.object({ reflect: z.object({ cron: z.string() }).optional() }).optional(),
+  // GitHub App wiring for coding deskmates. Only the non-secret `org` lives here; the
+  // App secrets (GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY / GITHUB_WEBHOOK_SECRET) come
+  // from env, like MCP connection tokens. A deskmate with `coding` enabled requires it.
+  // `channel: true` also mounts eve's root GitHub App channel (@mentions on issues/PRs).
+  github: z.object({ org: z.string().min(1), channel: z.boolean().optional() }).optional(),
   connections: z.record(z.string(), ConnectionConfig).default({}),
   deskmates: z.record(z.string(), DeskmateConfig).default({}),
   channels: z.record(z.string(), ChannelRoute).default({}),
@@ -76,6 +96,7 @@ const TeamConfig = z.object({
 export type TeamConfig = z.infer<typeof TeamConfig>;
 export type DeskmateConfig = z.infer<typeof DeskmateConfig>;
 export type ConnectionConfig = z.infer<typeof ConnectionConfig>;
+export type CodingSetting = z.infer<typeof CodingSetting>;
 
 // Deskmate ids and connection names become directory names AND import specifiers in
 // the generated `agent/**` tree, so they must be safe snake_case identifiers (same
@@ -117,6 +138,32 @@ export function defineTeam(input: unknown): TeamConfig {
   }
   for (const [ch, route] of Object.entries(team.channels)) {
     if (!team.deskmates[route.deskmate]) throw new Error(`channel "${ch}" routes to unknown deskmate "${route.deskmate}"`);
+  }
+  // Coding deskmates require the team `github` block, and every repo in their allowlist
+  // must resolve to that single org (Phase 1 brokers one installation token per session).
+  for (const [id, d] of Object.entries(team.deskmates)) {
+    if (!d.coding) continue;
+    if (!team.github) {
+      throw new Error(
+        `deskmate "${id}" has coding enabled but the team has no \`github\` block — set ` +
+          `github.org (and the GITHUB_APP_* env).`,
+      );
+    }
+    for (const r of d.coding.repos) {
+      const parts = r.split("/");
+      const [owner, name] = parts;
+      // Exactly two segments; the name must be a plain repo name OR exactly "*".
+      // A partial glob like "api-*" is rejected — it isn't a real repo, and it would
+      // otherwise make the sandbox read-token fall back to org-wide (the "*" branch in
+      // sandboxRepoScope), silently broadening clone access beyond the allowlist.
+      const nameOk = name === "*" || /^[A-Za-z0-9._-]+$/.test(name ?? "");
+      if (parts.length !== 2 || owner !== team.github.org || !nameOk) {
+        throw new Error(
+          `deskmate "${id}" coding.repos entry "${r}" must be within the single configured ` +
+            `github.org "${team.github.org}" as "owner/name" or "owner/*" (e.g. "${team.github.org}/api").`,
+        );
+      }
+    }
   }
   return team;
 }

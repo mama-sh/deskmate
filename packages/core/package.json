@@ -38,6 +38,10 @@
     "./memory": {
       "types": "./dist/memory/index.d.ts",
       "default": "./dist/memory/index.js"
+    },
+    "./coding": {
+      "types": "./dist/coding/index.d.ts",
+      "default": "./dist/coding/index.js"
     }
   },
   "files": [
@@ -52,12 +56,14 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node -e \"const fs=require('node:fs'); for (const f of ['front-desk-instructions.md','house-style.md']) fs.copyFileSync('src/'+f,'dist/'+f)\"",
+    "build": "tsc -p tsconfig.build.json && node -e \"const fs=require('node:fs'); for (const f of ['front-desk-instructions.md','house-style.md']) fs.copyFileSync('src/'+f,'dist/'+f); fs.copyFileSync('src/coding/instructions.md','dist/coding/instructions.md')\"",
     "prepack": "pnpm -w run build:packages",
     "typecheck": "tsc",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@octokit/auth-app": "^8.2.0",
+    "@octokit/rest": "^22.0.1",
     "@vercel/connect": "0.3.2",
     "ai": "^7.0.15",
     "eve": "^0.19.0",

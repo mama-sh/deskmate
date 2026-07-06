@@ -137,6 +137,21 @@ export function renderEveChannel(): string {
   return renderReexport("@deskmate/core/channels/eve");
 }
 
+/**
+ * `agent/channels/github.ts` — eve's GitHub App channel (root-only), emitted when
+ * `github.channel` is set. An `@mention` on an issue/PR auto-checks-out the repo into
+ * the sandbox; eve handles commit/push with the installation token brokered at the
+ * firewall. Auth comes from GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY / GITHUB_WEBHOOK_SECRET
+ * (the channel's defaults), so the shim needs no config.
+ */
+export function renderGithubChannel(): string {
+  return `${BANNER}
+import { githubChannel } from "eve/channels/github";
+
+export default githubChannel();
+`;
+}
+
 /** `agent/channels/deskmate-avatars.ts` — re-export core's avatar channel. */
 export function renderAvatarsChannel(): string {
   return renderReexport("@deskmate/core/channels/deskmate-avatars");
@@ -254,6 +269,47 @@ export default createMemoryReflection(${JSON.stringify(deskmateIds)}, await reso
 }
 
 /**
+ * `agent/subagents/<id>/sandbox.ts` — the coding deskmate's own sandbox (subagents
+ * own their sandbox, they don't inherit the root's). Bound to the team's github org
+ * so `onSession` can broker that org's installation token at the firewall. All logic
+ * lives in `@deskmate/core/coding`. Emitted only for a `coding`-enabled deskmate.
+ */
+export function renderCodingSandbox(coding: { org: string; repos: string[] }): string {
+  return `${BANNER}
+import { createCodingSandbox } from "@deskmate/core/coding";
+
+export default createCodingSandbox(${JSON.stringify({ org: coding.org, repos: coding.repos })});
+`;
+}
+
+/**
+ * `agent/subagents/<id>/tools/open_pull_request.ts` — the approval-gated push+PR
+ * tool bound to this deskmate id + the team org and the deskmate's repo allowlist.
+ */
+export function renderCodingTool(id: string, coding: { org: string; repos: string[] }): string {
+  return `${BANNER}
+import { createOpenPullRequestTool } from "@deskmate/core/coding";
+
+export default createOpenPullRequestTool(${JSON.stringify({ deskmateId: id, org: coding.org, repos: coding.repos })});
+`;
+}
+
+/**
+ * `agent/subagents/<id>/instructions/coding.ts` — the static coding safety rules as
+ * a coexisting instructions module (like memory's `instructions/memory.ts`, but
+ * static rather than per-turn dynamic). eve reads `instructions/*` beside the root
+ * `instructions.md`, so these rules hold even if a role's own instructions are terse.
+ */
+export function renderCodingInstructions(): string {
+  return `${BANNER}
+import { defineInstructions } from "eve/instructions";
+import { createCodingInstructions } from "@deskmate/core/coding";
+
+export default defineInstructions({ markdown: createCodingInstructions() });
+`;
+}
+
+/**
  * A TODO-stub connection, emitted when a deskmate `reads` a connection but no
  * authored file (`roles/<id>/connections/<name>.ts` or shared `connections/<name>.ts`)
  * exists. It is a valid eve connection so `eve build` doesn't crash on a dangling
@@ -350,5 +406,31 @@ ${oauth.join("\n")}`
 # DATABASE_URL=postgres://...`
     : "";
 
-  return `${preamble}${body}${memory}${oauthBlock}\n`;
+  // Surface the GitHub App vars when ≥1 deskmate opts into coding OR the root GitHub
+  // channel is mounted. The App brokers a short-lived install token for git; pushing
+  // requires the Vercel backend.
+  const anyCoding = Object.values(team.deskmates).some((d) => d.coding);
+  const needsGithubApp = anyCoding || team.github?.channel === true;
+  const coding = needsGithubApp
+    ? `\n\n# ── Coding deskmates (GitHub App) ─────────────────────────────────────────
+# A coding deskmate clones/pushes via a GitHub App installed on org "${team.github?.org ?? "<org>"}".
+# Create + install the App (grant contents:write + pull_requests:write), then set:
+GITHUB_APP_ID=
+# The PEM private key on one line — escape newlines as \\n (use \`vercel env add --value\`):
+GITHUB_APP_PRIVATE_KEY=
+GITHUB_APP_ORG=${team.github?.org ?? ""}
+# Only for the Phase-2 GitHub channel (@mentions on issues/PRs):
+GITHUB_WEBHOOK_SECRET=${
+        team.github?.channel
+          ? `
+# The App slug (from github.com/apps/<slug>) — the GitHub channel uses it to decide
+# which @mentions to answer:
+GITHUB_APP_SLUG=`
+          : ""
+      }
+# Local-only read/explore fallback (Docker can't broker the App token). NOT for production:
+# GITHUB_TOKEN=`
+    : "";
+
+  return `${preamble}${body}${memory}${coding}${oauthBlock}\n`;
 }

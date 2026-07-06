@@ -366,6 +366,67 @@ deploys. **Without it, memory is ephemeral** — an in-memory store that's fine 
 but forgets on every cold start. Recall today is substring search; the store is built so a
 **pgvector** semantic-recall upgrade drops in later without touching the tools or config.
 
+## Coding (opt-in)
+
+By default a deskmate only reads. Set `coding` on a deskmate and it can do **agentic
+coding work**: clone a GitHub repo into its isolated sandbox, make a scoped change on a
+feature branch, run the tests, and **open a pull request** for a human to review and merge.
+It **never pushes to the default branch and never merges** — every change lands as a PR.
+
+The catalog ships a flagship **`engineer`** ("Software Engineer") role for this. Add it,
+then enable coding on it:
+
+```ts
+// deskmate.config.ts
+export default defineTeam({
+  github: { org: "your-org" },          // the org your GitHub App is installed on
+  deskmates: {
+    engineer: {
+      role: "engineer",
+      // ...emoji / displayName / summary from `deskmate add engineer`...
+      coding: { repos: ["your-org/*"] }, // allowlist (globs within github.org)
+    },
+  },
+});
+```
+
+**Auth is a GitHub App**, not a personal token — the best-practice model for an autonomous
+agent (short-lived, per-repo, per-org revocation). Create a GitHub App, install it on your
+org with **`contents: write`** + **`pull requests: write`**, then set the env:
+
+```bash
+vercel env add GITHUB_APP_ID production --value <app-id>
+# the PEM private key on one line, newlines escaped as \n:
+vercel env add GITHUB_APP_PRIVATE_KEY production --value "$(awk 'BEGIN{ORS="\\n"}1' key.pem)"
+vercel env add GITHUB_APP_ORG production --value your-org
+```
+
+The sandbox only ever holds a **read-only clone token** — brokered onto git's outbound
+requests at the firewall, never in the sandbox process, the conversation, or the model's
+context. Making a change is a single **`approval: always()`** step: once you approve in
+Slack, the **runtime** (not the sandbox) reads your committed diff and creates the branch +
+commit + PR through the GitHub API with a short-lived **write token scoped to that one
+repo**. The write credential never enters the sandbox — so even a prompt-injected model
+can't push outside the approved path (control-plane / execution-plane separation). The tool
+refuses any branch outside `deskmate/<id>/<slug>`, stays within your `coding.repos`
+allowlist, and never merges.
+
+Two things to know:
+
+- **Pushing needs the Vercel backend.** Firewall credential brokering runs on Vercel Sandbox
+  (prod). Local Docker only does allow-all/deny-all, so `deskmate dev` can clone/explore
+  public repos but can't broker the App token to push — that's expected. A `GITHUB_TOKEN`
+  env var is a local-only read/explore fallback; **not for production**.
+- **Turn on branch protection.** The safety net is branch-per-task + PR + human merge, so
+  protect your default branch (require a review before merge). The App can only ever create
+  a `deskmate/*` branch and open a PR — it cannot merge.
+
+**GitHub-native surface (optional).** Set `github: { org, channel: true }` to also mount
+eve's GitHub App channel: `@mention` the bot on an issue or PR and it checks the repo out,
+works in-thread, and commits/pushes with the same firewall-brokered token. It reuses the
+same App (add `GITHUB_WEBHOOK_SECRET` and point the App's webhook at `/eve/v1/github`). This
+is additive to the Slack-initiated coding above.
+
 ## Slack setup (Vercel Connect)
 
 Slack reaches the **deployed** project through

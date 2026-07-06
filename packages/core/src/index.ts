@@ -5,7 +5,7 @@
 //
 export type { Roster, DeskmateIdentity } from "./roster.js";
 
-export { defineTeam, type TeamConfig, type DeskmateConfig, type ConnectionConfig } from "./config.js";
+export { defineTeam, type TeamConfig, type DeskmateConfig, type ConnectionConfig, type CodingSetting } from "./config.js";
 
 export { defineDeskmate } from "./deskmate.js";
 

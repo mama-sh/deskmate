@@ -15,6 +15,7 @@ function deps(over: Partial<DoctorDeps>): DoctorDeps {
     resolveConnection: async () => ({ kind: "not-found" }),
     probe: async () => ({ reachable: true, authOk: true, tools: [] }),
     loadEnv: () => null, // hermetic: never touch the real filesystem env in unit tests
+    checkCodingAuth: async () => ({ ok: true }),
     ...over,
   };
 }
@@ -110,6 +111,102 @@ describe("doctor", () => {
       resolveConnection: async () => { throw new Error("import blew up"); },
     });
     await expect(doctor([], "/proj", d)).resolves.toBe(1);
+  });
+});
+
+describe("doctor coding readiness", () => {
+  const codingTeam = (over: Record<string, unknown> = {}) =>
+    ({
+      connections: {},
+      github: { org: "acme" },
+      deskmates: { engineer: { role: "engineer", coding: { repos: ["acme/*"] } } },
+      channels: {},
+      ...over,
+    }) as any;
+
+  it("exits 0 when the GitHub App can mint a token for the org", async () => {
+    const d = deps({ loadTeam: async () => codingTeam(), checkCodingAuth: async () => ({ ok: true }) });
+    expect(await doctor([], "/proj", d)).toBe(0);
+  });
+
+  it("exits 1 when the GitHub App can't mint a token (missing env / not installed)", async () => {
+    const d = deps({
+      loadTeam: async () => codingTeam(),
+      checkCodingAuth: async () => ({ ok: false, error: "set GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY" }),
+    });
+    expect(await doctor([], "/proj", d)).toBe(1);
+  });
+
+  it("exits 1 when coding is enabled but no github block is configured", async () => {
+    const d = deps({ loadTeam: async () => codingTeam({ github: undefined }), checkCodingAuth: async () => ({ ok: true }) });
+    expect(await doctor([], "/proj", d)).toBe(1);
+  });
+
+  it("checks coding readiness even when there are no MCP connections (org-level for a glob allowlist)", async () => {
+    const called = vi.fn(async () => ({ ok: true as const }));
+    const d = deps({ loadTeam: async () => codingTeam(), checkCodingAuth: called });
+    expect(await doctor([], "/proj", d)).toBe(0);
+    expect(called).toHaveBeenCalledWith("acme", undefined); // acme/* glob → org-level, no repositoryNames
+  });
+
+  it("checks a repo-scoped token for an exact coding.repos allowlist", async () => {
+    const called = vi.fn(async () => ({ ok: true as const }));
+    const exactTeam = codingTeam({
+      deskmates: { engineer: { role: "engineer", coding: { repos: ["acme/api", "acme/web"] } } },
+    });
+    const d = deps({ loadTeam: async () => exactTeam, checkCodingAuth: called });
+    expect(await doctor([], "/proj", d)).toBe(0);
+    expect(called).toHaveBeenCalledWith("acme", ["api", "web"]);
+  });
+
+  it("does not run the coding check for a team with no coding deskmates", async () => {
+    const called = vi.fn(async () => ({ ok: true as const }));
+    const d = deps({ loadTeam: async () => team({ good: { kind: "mcp", env: "GOOD" } }), checkCodingAuth: called });
+    await doctor([], "/proj", d);
+    expect(called).not.toHaveBeenCalled();
+  });
+
+  const channelTeam = (over: Record<string, unknown> = {}) =>
+    ({ connections: {}, github: { org: "acme", channel: true }, deskmates: {}, channels: {}, ...over }) as any;
+
+  async function withEnv(vars: Record<string, string | undefined>, fn: () => Promise<void>) {
+    const prev: Record<string, string | undefined> = {};
+    for (const k of Object.keys(vars)) {
+      prev[k] = process.env[k];
+      if (vars[k] === undefined) delete process.env[k];
+      else process.env[k] = vars[k];
+    }
+    try {
+      await fn();
+    } finally {
+      for (const k of Object.keys(prev)) {
+        if (prev[k] === undefined) delete process.env[k];
+        else process.env[k] = prev[k];
+      }
+    }
+  }
+
+  it("passes a channel-only team with valid App, webhook secret, and app slug", async () => {
+    await withEnv({ GITHUB_WEBHOOK_SECRET: "whsec", GITHUB_APP_SLUG: "my-app" }, async () => {
+      const called = vi.fn(async () => ({ ok: true as const }));
+      const d = deps({ loadTeam: async () => channelTeam(), checkCodingAuth: called });
+      expect(await doctor([], "/proj", d)).toBe(0);
+      expect(called).toHaveBeenCalledWith("acme", undefined); // no exact repos → org-level
+    });
+  });
+
+  it("fails when the channel is enabled but GITHUB_WEBHOOK_SECRET is missing", async () => {
+    await withEnv({ GITHUB_WEBHOOK_SECRET: undefined, GITHUB_APP_SLUG: "my-app" }, async () => {
+      const d = deps({ loadTeam: async () => channelTeam(), checkCodingAuth: async () => ({ ok: true }) });
+      expect(await doctor([], "/proj", d)).toBe(1);
+    });
+  });
+
+  it("fails when the channel is enabled but GITHUB_APP_SLUG is missing (mentions won't dispatch)", async () => {
+    await withEnv({ GITHUB_WEBHOOK_SECRET: "whsec", GITHUB_APP_SLUG: undefined }, async () => {
+      const d = deps({ loadTeam: async () => channelTeam(), checkCodingAuth: async () => ({ ok: true }) });
+      expect(await doctor([], "/proj", d)).toBe(1);
+    });
   });
 });
 
