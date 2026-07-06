@@ -93,5 +93,12 @@ export async function deploy(
   const patched = deps.patch(cwd);
   console.log(`✓ eve-trace: patched ${patched.length} function bundle(s)`);
 
-  return deps.run("vercel", ["deploy", "--prebuilt", "--prod", ...args], cwd);
+  const deployCode = await deps.run("vercel", ["deploy", "--prebuilt", "--prod", ...args], cwd);
+  if (deployCode === 0 && hasCoding) {
+    console.log(
+      "\nℹ coding deskmate deployed. Set GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY / GITHUB_APP_ORG " +
+        "in the deploy env, or the clone/PR steps stay unauthenticated. Verify readiness with `deskmate doctor`.",
+    );
+  }
+  return deployCode;
 }

@@ -69,6 +69,28 @@ describe("deploy", () => {
     expect(deps.patch).not.toHaveBeenCalled();
   });
 
+  it("coding team: prints the GitHub App env reminder after a successful deploy", async () => {
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((m?: unknown) => {
+      logs.push(String(m));
+    });
+    const { deps } = makeDeps([0, 0, 0, 0], { coding: true });
+    await deploy([], "/proj", deps);
+    spy.mockRestore();
+    expect(logs.join("\n")).toMatch(/GITHUB_APP_ID/);
+  });
+
+  it("non-coding team: does NOT print the GitHub App reminder", async () => {
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((m?: unknown) => {
+      logs.push(String(m));
+    });
+    const { deps } = makeDeps([0, 0, 0]);
+    await deploy([], "/proj", deps);
+    spy.mockRestore();
+    expect(logs.join("\n")).not.toMatch(/GITHUB_APP_ID/);
+  });
+
   it("short-circuits (no patch, no deploy) when the build fails", async () => {
     const { deps, calls } = makeDeps([0, 2]); // pull ok, build exits non-zero
     const code = await deploy([], "/proj", deps);
