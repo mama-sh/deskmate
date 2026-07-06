@@ -24,6 +24,7 @@ function okDeps() {
   return {
     getOriginRepo: vi.fn().mockResolvedValue("acme/api"),
     getDefaultBranch: vi.fn().mockResolvedValue("main"),
+    getBaseSha: vi.fn().mockResolvedValue("basesha"),
     readChangedFiles: vi.fn().mockResolvedValue(oneChange),
     pushCommit: vi.fn().mockResolvedValue(undefined),
     openPr: vi.fn().mockResolvedValue({ url: "https://github.com/acme/api/pull/7" }),
@@ -100,8 +101,9 @@ describe("submitPullRequest happy path", () => {
     const res = await submitPullRequest(base, deps);
     expect(deps.getDefaultBranch).toHaveBeenCalledWith("acme/api");
     expect(deps.readChangedFiles).toHaveBeenCalledWith("main");
+    expect(deps.getBaseSha).toHaveBeenCalledWith("main");
     expect(deps.pushCommit).toHaveBeenCalledWith(
-      expect.objectContaining({ repo: "acme/api", base: "main", branch: "deskmate/engineer/fix-typo", files: oneChange }),
+      expect.objectContaining({ repo: "acme/api", baseSha: "basesha", branch: "deskmate/engineer/fix-typo", files: oneChange }),
     );
     expect(deps.openPr).toHaveBeenCalledWith(
       expect.objectContaining({ repo: "acme/api", head: "deskmate/engineer/fix-typo", base: "main" }),
@@ -113,7 +115,7 @@ describe("submitPullRequest happy path", () => {
     const deps = okDeps();
     await submitPullRequest({ ...base, base: "develop" }, deps);
     expect(deps.getDefaultBranch).not.toHaveBeenCalled();
-    expect(deps.pushCommit).toHaveBeenCalledWith(expect.objectContaining({ base: "develop" }));
+    expect(deps.getBaseSha).toHaveBeenCalledWith("develop");
   });
 });
 
@@ -165,7 +167,6 @@ describe("readSandboxChanges", () => {
 describe("commitViaApi", () => {
   it("builds one commit (blobs + tree with deletes) and moves the branch ref", async () => {
     const api = {
-      getRefSha: vi.fn().mockResolvedValue("basesha"),
       getCommitTreeSha: vi.fn().mockResolvedValue("basetree"),
       createBlob: vi.fn(async (c: string) => `blob-${c}`),
       createTree: vi.fn().mockResolvedValue("newtree"),
@@ -173,7 +174,7 @@ describe("commitViaApi", () => {
       createBranchRef: vi.fn().mockResolvedValue(undefined),
     };
     await commitViaApi(api, {
-      base: "main",
+      baseSha: "basesha",
       branch: "deskmate/e/x",
       message: "msg",
       files: [
@@ -181,8 +182,7 @@ describe("commitViaApi", () => {
         { path: "gone.ts", content: null, encoding: "utf-8", mode: "100644" },
       ],
     });
-    expect(api.getRefSha).toHaveBeenCalledWith("heads/main");
-    expect(api.getCommitTreeSha).toHaveBeenCalledWith("basesha");
+    expect(api.getCommitTreeSha).toHaveBeenCalledWith("basesha"); // sandbox base SHA, not GitHub's current tip
     expect(api.createBlob).toHaveBeenCalledTimes(1); // only the content file, not the delete
     expect(api.createTree).toHaveBeenCalledWith(
       "basetree",

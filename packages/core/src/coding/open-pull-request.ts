@@ -28,10 +28,12 @@ export interface SubmitDeps {
   getOriginRepo: () => Promise<string | null>;
   /** The repo's default branch (used as the PR base when none is given). */
   getDefaultBranch: (repo: string) => Promise<string>;
+  /** The commit SHA the sandbox's `origin/<base>` points at (what the diff is against). */
+  getBaseSha: (base: string) => Promise<string>;
   /** The net changed files on the sandbox's HEAD vs `base` (read-only). */
   readChangedFiles: (base: string) => Promise<ChangedFile[]>;
   /** Create the branch + commit from the changes, via the GitHub API (write token). */
-  pushCommit: (a: { repo: string; base: string; branch: string; message: string; files: ChangedFile[] }) => Promise<void>;
+  pushCommit: (a: { repo: string; branch: string; baseSha: string; message: string; files: ChangedFile[] }) => Promise<void>;
   /** Open the PR (write token), returns its url. */
   openPr: (a: { repo: string; head: string; base: string; title: string; body: string }) => Promise<{ url: string }>;
 }
@@ -110,11 +112,16 @@ export async function submitPullRequest(input: SubmitInput, deps: SubmitDeps): P
   if (input.branch === base) {
     throw new Error(`refusing to use the base branch "${base}" as the head — commit to a feature branch and open a PR`);
   }
+  // Base the commit on the SHA the sandbox actually diffed against (origin/base at
+  // clone time), NOT GitHub's current base tip — otherwise, if base advanced after the
+  // clone and touched a changed file, reparenting the whole-file blobs onto the new tip
+  // would silently revert that upstream change.
+  const baseSha = await deps.getBaseSha(base);
   const files = await deps.readChangedFiles(base);
   if (files.length === 0) {
     throw new Error("no changes to submit — commit your work on the feature branch first");
   }
-  await deps.pushCommit({ repo: input.repo, base, branch: input.branch, message: input.commitMessage, files });
+  await deps.pushCommit({ repo: input.repo, branch: input.branch, baseSha, message: input.commitMessage, files });
   const pr = await deps.openPr({
     repo: input.repo,
     head: input.branch,
@@ -192,7 +199,6 @@ interface TreeEntry {
 
 /** The narrow set of GitHub write operations `commitViaApi` needs (adapts Octokit). */
 export interface RepoWriteApi {
-  getRefSha: (ref: string) => Promise<string>;
   getCommitTreeSha: (commitSha: string) => Promise<string>;
   createBlob: (content: string, encoding: "utf-8" | "base64") => Promise<string>;
   createTree: (baseTreeSha: string, entries: TreeEntry[]) => Promise<string>;
@@ -208,10 +214,9 @@ export interface RepoWriteApi {
  */
 export async function commitViaApi(
   api: RepoWriteApi,
-  a: { base: string; branch: string; message: string; files: ChangedFile[] },
+  a: { baseSha: string; branch: string; message: string; files: ChangedFile[] },
 ): Promise<void> {
-  const baseSha = await api.getRefSha(`heads/${a.base}`);
-  const baseTreeSha = await api.getCommitTreeSha(baseSha);
+  const baseTreeSha = await api.getCommitTreeSha(a.baseSha);
   const entries: TreeEntry[] = [];
   for (const f of a.files) {
     if (f.content === null) {
@@ -222,13 +227,12 @@ export async function commitViaApi(
     }
   }
   const treeSha = await api.createTree(baseTreeSha, entries);
-  const commitSha = await api.createCommit(a.message, treeSha, [baseSha]);
+  const commitSha = await api.createCommit(a.message, treeSha, [a.baseSha]);
   await api.createBranchRef(a.branch, commitSha);
 }
 
 function makeRepoWriteApi(octo: Octokit, owner: string, repo: string): RepoWriteApi {
   return {
-    getRefSha: async (ref) => (await octo.rest.git.getRef({ owner, repo, ref })).data.object.sha,
     getCommitTreeSha: async (sha) => (await octo.rest.git.getCommit({ owner, repo, commit_sha: sha })).data.tree.sha,
     createBlob: async (content, encoding) => (await octo.rest.git.createBlob({ owner, repo, content, encoding })).data.sha,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -305,6 +309,12 @@ export function createOpenPullRequestTool(opts: OpenPullRequestToolOptions) {
           const [owner, name] = repo.split("/");
           const octo = await octokitFor(name);
           return (await octo.rest.repos.get({ owner, repo: name })).data.default_branch;
+        },
+        getBaseSha: async (b) => {
+          // `b` is a validated safe ref (SAFE_REF) before this runs.
+          const r = await sandbox.run({ command: `git rev-parse "origin/${b}"` });
+          if (r.exitCode !== 0) throw new Error(`could not resolve origin/${b} in the sandbox`);
+          return r.stdout.trim();
         },
         readChangedFiles: (base) => readSandboxChanges(sandbox, base),
         pushCommit: async (a) => {

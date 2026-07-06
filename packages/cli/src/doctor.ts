@@ -139,7 +139,16 @@ async function checkCodingAuthReal(org: string, repositoryNames?: string[]): Pro
   const env = readGithubAppEnv();
   if (!env.present) return { ok: false, error: "set GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY" };
   try {
-    await getInstallationToken({ appId: env.appId, privateKey: env.privateKey, org, repositoryNames });
+    // Request the SAME write permissions the PR tool uses at runtime — GitHub errors
+    // when you request permissions the installation wasn't granted, so a read-only App
+    // install fails here rather than on the first approved PR.
+    await getInstallationToken({
+      appId: env.appId,
+      privateKey: env.privateKey,
+      org,
+      repositoryNames,
+      permissions: { contents: "write", pull_requests: "write" },
+    });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
