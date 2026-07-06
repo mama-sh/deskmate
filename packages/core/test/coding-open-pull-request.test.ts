@@ -118,9 +118,13 @@ describe("submitPullRequest happy path", () => {
 });
 
 describe("readSandboxChanges", () => {
-  function sandboxWith(stdout: string, exitCode = 0) {
+  function sandboxWith(diffStdout: string, opts: { diffExit?: number; dirtyExit?: number } = {}) {
     return {
-      run: vi.fn().mockResolvedValue({ stdout, exitCode }),
+      run: vi.fn(async ({ command }: { command: string }) =>
+        command.includes("--quiet")
+          ? { stdout: "", exitCode: opts.dirtyExit ?? 0 }
+          : { stdout: diffStdout, exitCode: opts.diffExit ?? 0 },
+      ),
       readBinaryFile: vi.fn(async ({ path }: { path: string }) => new TextEncoder().encode(`body:${path}`)),
     };
   }
@@ -146,8 +150,14 @@ describe("readSandboxChanges", () => {
     ]);
   });
 
+  it("rejects a dirty working tree (uncommitted changes to tracked files)", async () => {
+    const sandbox = sandboxWith("A\0a.ts\0", { dirtyExit: 1 });
+    await expect(readSandboxChanges(sandbox, "main")).rejects.toThrow(/uncommitted changes/i);
+    expect(sandbox.readBinaryFile).not.toHaveBeenCalled();
+  });
+
   it("throws when the diff command fails", async () => {
-    const sandbox = sandboxWith("", 128);
+    const sandbox = sandboxWith("", { diffExit: 128 });
     await expect(readSandboxChanges(sandbox, "main")).rejects.toThrow(/could not diff/i);
   });
 });
@@ -208,5 +218,10 @@ describe("parseGithubRepo", () => {
     expect(parseGithubRepo("https://github.com/acme/api")).toBe("acme/api");
     expect(parseGithubRepo("git@github.com:acme/api.git")).toBe("acme/api");
     expect(parseGithubRepo("https://gitlab.com/acme/api.git")).toBeNull();
+  });
+
+  it("requires github.com to be the actual host (rejects a crafted lookalike path)", () => {
+    expect(parseGithubRepo("https://evil.example/github.com/acme/api.git")).toBeNull();
+    expect(parseGithubRepo("https://x-access-token:tok@github.com/acme/api.git")).toBe("acme/api");
   });
 });

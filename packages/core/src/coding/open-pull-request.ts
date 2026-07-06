@@ -43,9 +43,16 @@ const SAFE_REPO = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 // A safe git ref name (used in a shell `git diff` command — injection guard).
 const SAFE_REF = /^[A-Za-z0-9._/-]+$/;
 
-/** Extract owner/name from a github remote url (https or ssh form), else null. */
+/**
+ * Extract owner/name from a github remote url, requiring github.com to be the actual
+ * HOST (https://[user@]github.com/… or git@github.com:…) — anchored so a crafted
+ * origin like https://evil.example/github.com/acme/api.git does NOT parse as acme/api
+ * and slip past the origin check. Returns null for any non-github.com host.
+ */
 export function parseGithubRepo(url: string): string | null {
-  const m = url.trim().match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?\/?$/i);
+  const m = url
+    .trim()
+    .match(/^(?:https?:\/\/(?:[^/@]*@)?github\.com\/|git@github\.com:)([^/]+)\/([^/]+?)(?:\.git)?\/?$/i);
   return m ? `${m[1]}/${m[2]}` : null;
 }
 
@@ -132,6 +139,14 @@ export interface SandboxLike {
  * 100644 (executable-bit preservation is a known limitation).
  */
 export async function readSandboxChanges(sandbox: SandboxLike, base: string): Promise<ChangedFile[]> {
+  // The file LIST comes from the committed diff (origin/base...HEAD) but the bytes are
+  // read from the working tree, so a dirty tree would submit uncommitted content. Require
+  // a clean tree (tracked files) — enforces "commit your work first" and keeps the bytes
+  // == HEAD without re-introducing shell path interpolation (git show HEAD:<path>).
+  const clean = await sandbox.run({ command: "git diff --quiet HEAD" });
+  if (clean.exitCode !== 0) {
+    throw new Error("the working tree has uncommitted changes — commit your work on the feature branch before opening a PR");
+  }
   const res = await sandbox.run({ command: `git diff --name-status -z "origin/${base}...HEAD"` });
   if (res.exitCode !== 0) {
     throw new Error(`could not diff against origin/${base} in the sandbox (exit ${res.exitCode})`);
