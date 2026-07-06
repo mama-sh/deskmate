@@ -11,8 +11,8 @@ describe("renderMcpConnection", () => {
       tools: ["search_logs", "get_monitor"],
     });
     expect(out).toContain('import { defineMcpClientConnection } from "eve/connections";');
-    expect(out).toContain("process.env[\"DATADOG_MCP_URL\"] ?? \"https://example.invalid/mcp\"");
-    expect(out).toContain("process.env[\"DATADOG_MCP_TOKEN\"] ?? \"\"");
+    expect(out).toContain("process.env[\"DATADOG_MCP_URL\"] || \"https://example.invalid/mcp\"");
+    expect(out).toContain("process.env[\"DATADOG_MCP_TOKEN\"] || \"\"");
     expect(out).toContain('tools: { allow: ["search_logs", "get_monitor"] }');
     expect(out).toContain("Read-only Datadog: search logs and monitors.");
   });
@@ -22,6 +22,62 @@ describe("renderMcpConnection", () => {
       name: "x", urlEnv: "X_MCP_URL", tokenEnv: "X_MCP_TOKEN", description: "d", tools: [],
     });
     expect(out).toContain("tools: { allow: [] }");
+  });
+
+  it("uses || (not ??) for the URL fallback so an empty-string env still falls back", () => {
+    const src = renderMcpConnection({
+      name: "acme", urlEnv: "ACME_MCP_URL", tokenEnv: "ACME_MCP_TOKEN",
+      description: "Acme.", tools: ["search"],
+    });
+    expect(src).toContain('process.env["ACME_MCP_URL"] || "https://example.invalid/mcp"');
+    expect(src).not.toContain('?? "https://example.invalid/mcp"');
+  });
+
+  it("bearer scheme (default) emits auth.getToken with a Bearer token", () => {
+    const src = renderMcpConnection({
+      name: "acme", urlEnv: "ACME_MCP_URL", tokenEnv: "ACME_MCP_TOKEN",
+      description: "Acme.", tools: ["search"],
+    });
+    expect(src).toContain('auth: { getToken: async () => ({ token: process.env["ACME_MCP_TOKEN"] || "" }) }');
+    expect(src).not.toContain("headers:");
+  });
+
+  it("basic scheme base64-encodes the token env (plaintext pk:sk) into an Authorization: Basic header", () => {
+    const src = renderMcpConnection({
+      name: "lf", urlEnv: "LF_MCP_URL", tokenEnv: "LF_MCP_TOKEN",
+      description: "Langfuse.", tools: ["traces"], scheme: "basic",
+    });
+    expect(src).toContain('Basic ${Buffer.from(process.env["LF_MCP_TOKEN"] || "").toString("base64")}');
+    expect(src).toContain("headers: {");
+    expect(src).not.toContain("auth:");
+    expect(src).toContain("Set LF_MCP_URL + LF_MCP_TOKEN"); // hint names the URL env too, not just the token
+  });
+
+  it("custom-header scheme sends the token under the named header", () => {
+    const src = renderMcpConnection({
+      name: "docs", urlEnv: "DOCS_MCP_URL", tokenEnv: "DOCS_MCP_TOKEN",
+      description: "Docs.", tools: ["search"], scheme: "custom-header", headerName: "X-Api-Key",
+    });
+    expect(src).toContain('"X-Api-Key": process.env["DOCS_MCP_TOKEN"] || ""');
+    expect(src).toContain("headers: {");
+    expect(src).toContain("Set DOCS_MCP_URL + DOCS_MCP_TOKEN"); // hint names the URL env too
+  });
+
+  it("custom-header scheme defaults the header name to X-Api-Key when none is given", () => {
+    const src = renderMcpConnection({
+      name: "docs", urlEnv: "DOCS_MCP_URL", tokenEnv: "DOCS_MCP_TOKEN",
+      description: "Docs.", tools: ["search"], scheme: "custom-header",
+    });
+    expect(src).toContain('"X-Api-Key": process.env["DOCS_MCP_TOKEN"] || ""');
+  });
+
+  it("custom-header scheme falls back to X-Api-Key when the header name is not a valid HTTP token", () => {
+    const src = renderMcpConnection({
+      name: "docs", urlEnv: "DOCS_MCP_URL", tokenEnv: "DOCS_MCP_TOKEN",
+      description: "Docs.", tools: ["search"], scheme: "custom-header", headerName: "bad\nname",
+    });
+    expect(src).toContain('"X-Api-Key": process.env["DOCS_MCP_TOKEN"] || ""');
+    expect(src).not.toContain("bad\nname"); // the newline-bearing name never reaches the output
   });
 });
 

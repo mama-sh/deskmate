@@ -8,11 +8,11 @@ import { defineMcpClientConnection } from "eve/connections";
 // token, swap `auth` for `connect("linear/deskmate")` from "@vercel/connect/eve"
 // (see the connections guide). The single-deployment default keeps it env-only.
 export default defineMcpClientConnection({
-  url: process.env.LINEAR_MCP_URL ?? "https://example.invalid/mcp",
+  url: process.env.LINEAR_MCP_URL || "https://example.invalid/mcp",
   description:
     "Read-only project tracking (Linear): list and search issues, fetch issue details, list " +
     "projects and cycles. Use to ground sprint-status answers in real issue data.",
-  auth: { getToken: async () => ({ token: process.env.LINEAR_MCP_TOKEN ?? "" }) },
+  auth: { getToken: async () => ({ token: process.env.LINEAR_MCP_TOKEN || "" }) },
   // Read-only surface. Replace these with your MCP server's actual read tools.
   tools: { allow: ["list_issues", "get_issue", "search_issues", "list_projects"] },
 });

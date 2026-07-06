@@ -1,0 +1,14 @@
+{
+  "planPath": "docs/plans/2026-07-05-connection-doctor-and-deploy-hardening.md",
+  "tasks": [
+    {"id": 5, "subject": "Task 1: deploy pulls prod env first (fail-fast)", "status": "completed"},
+    {"id": 6, "subject": "Task 2: ?? -> || on URL fallbacks", "status": "completed"},
+    {"id": 7, "subject": "Task 3: renderMcpConnection scheme param", "status": "completed", "blockedBy": [6]},
+    {"id": 8, "subject": "Task 4: mcp-add token-scheme prompt", "status": "completed", "blockedBy": [7]},
+    {"id": 9, "subject": "Task 5: lib/mcp-probe.ts Streamable HTTP client", "status": "completed"},
+    {"id": 10, "subject": "Task 6: doctor.ts resolve + report", "status": "completed", "blockedBy": [9]},
+    {"id": 11, "subject": "Task 7: wire doctor/check into cli.ts", "status": "completed", "blockedBy": [10]},
+    {"id": 12, "subject": "Task 8: README docs", "status": "completed", "blockedBy": [8, 11]}
+  ],
+  "lastUpdated": "2026-07-05"
+}

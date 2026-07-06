@@ -6,6 +6,7 @@ import { mcpAdd } from "./mcp-add.js";
 import { syncCommand } from "./sync/index.js";
 import { dev } from "./dev.js";
 import { deploy } from "./deploy.js";
+import { doctor } from "./doctor.js";
 import { connectCommand } from "./connect.js";
 
 const USAGE = [
@@ -17,6 +18,7 @@ const USAGE = [
   "  deskmate sync             regenerate the agent/** tree from deskmate.config.ts",
   "  deskmate dev              sync + eve dev with live re-sync on config edits",
   "  deskmate deploy           sync + build + fix eve trace + deploy to Vercel",
+  "  deskmate doctor           check each MCP connection (reachable? authed? tools match?) [alias: check]",
   "  deskmate connect <name>   provision an oauth connection's Vercel Connect connector",
 ].join("\n");
 
@@ -48,6 +50,10 @@ try {
       break;
     case "deploy":
       process.exitCode = await deploy(rest);
+      break;
+    case "doctor":
+    case "check":
+      process.exitCode = await doctor(rest);
       break;
     case "connect":
       process.exitCode = await connectCommand(rest);
