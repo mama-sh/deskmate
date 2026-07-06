@@ -64,6 +64,17 @@ describe("probeMcp", () => {
     expect(r.error).toContain("ECONNREFUSED");
   });
 
+  it("times out (reachable:false) instead of hanging when the server never responds", async () => {
+    // A fetch that hangs until its abort signal fires — models a stalled connection.
+    const hangingFetch = (_url: string, opts: any) =>
+      new Promise((_resolve, reject) => {
+        opts.signal?.addEventListener("abort", () => reject(new Error("The operation was aborted due to timeout")));
+      });
+    const r = await probeMcp("https://x/mcp", {}, hangingFetch as any, 20);
+    expect(r.reachable).toBe(false);
+    expect(r.error).toMatch(/abort|timeout/i);
+  });
+
   it("walks tools/list pagination via nextCursor and accumulates every page", async () => {
     const fetchImpl = async (_url: string, opts: any) => {
       const req = JSON.parse(opts.body);

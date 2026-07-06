@@ -47,11 +47,17 @@ async function readJsonRpc(res: Response): Promise<any> {
  * `deskmate doctor` can report each connection without a try/catch per call. `fetchImpl`
  * is injected for tests. SSE-only servers that reject the initialize POST surface as
  * `reachable: false` with the server's message.
+ *
+ * Each request is bounded by `timeoutMs` (via `AbortSignal.timeout`) so a stalled
+ * connection or an SSE stream the server never closes can't hang `deskmate doctor`
+ * (or a CI gate) forever — a timeout aborts the fetch and maps to `reachable: false` /
+ * `error` like any other transport failure.
  */
 export async function probeMcp(
   url: string,
   headers: Record<string, string>,
   fetchImpl: FetchLike = fetch,
+  timeoutMs = 10_000,
 ): Promise<ProbeResult> {
   const base = {
     "content-type": "application/json",
@@ -59,7 +65,12 @@ export async function probeMcp(
     ...headers,
   };
   const post = (body: unknown, extra: Record<string, string> = {}) =>
-    fetchImpl(url, { method: "POST", headers: { ...base, ...extra }, body: JSON.stringify(body) });
+    fetchImpl(url, {
+      method: "POST",
+      headers: { ...base, ...extra },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
 
   let initRes: Response;
   try {
