@@ -335,6 +335,58 @@ deploys. **Without it, memory is ephemeral** — an in-memory store that's fine 
 but forgets on every cold start. Recall today is substring search; the store is built so a
 **pgvector** semantic-recall upgrade drops in later without touching the tools or config.
 
+## Coding (opt-in)
+
+By default a deskmate only reads. Set `coding` on a deskmate and it can do **agentic
+coding work**: clone a GitHub repo into its isolated sandbox, make a scoped change on a
+feature branch, run the tests, and **open a pull request** for a human to review and merge.
+It **never pushes to the default branch and never merges** — every change lands as a PR.
+
+The catalog ships a flagship **`engineer`** ("Software Engineer") role for this. Add it,
+then enable coding on it:
+
+```ts
+// deskmate.config.ts
+export default defineTeam({
+  github: { org: "your-org" },          // the org your GitHub App is installed on
+  deskmates: {
+    engineer: {
+      role: "engineer",
+      // ...emoji / displayName / summary from `deskmate add engineer`...
+      coding: { repos: ["your-org/*"] }, // allowlist (globs within github.org)
+    },
+  },
+});
+```
+
+**Auth is a GitHub App**, not a personal token — the best-practice model for an autonomous
+agent (short-lived, per-repo, per-org revocation). Create a GitHub App, install it on your
+org with **`contents: write`** + **`pull requests: write`**, then set the env:
+
+```bash
+vercel env add GITHUB_APP_ID production --value <app-id>
+# the PEM private key on one line, newlines escaped as \n:
+vercel env add GITHUB_APP_PRIVATE_KEY production --value "$(awk 'BEGIN{ORS="\\n"}1' key.pem)"
+vercel env add GITHUB_APP_ORG production --value your-org
+```
+
+The App's **installation token is brokered at the sandbox firewall** — it's injected onto
+git's outbound requests but never enters the sandbox process, the conversation, or the
+model's context. The push + PR is a single **`approval: always()`** step, so a human
+approves in Slack before anything leaves the sandbox. The tool also verifies the sandbox's
+`origin` is the approved repo, refuses any branch outside `deskmate/<id>/<slug>`, and stays
+within your `coding.repos` allowlist.
+
+Two things to know:
+
+- **Pushing needs the Vercel backend.** Firewall credential brokering runs on Vercel Sandbox
+  (prod). Local Docker only does allow-all/deny-all, so `deskmate dev` can clone/explore
+  public repos but can't broker the App token to push — that's expected. A `GITHUB_TOKEN`
+  env var is a local-only read/explore fallback; **not for production**.
+- **Turn on branch protection.** The safety net is branch-per-task + PR + human merge, so
+  protect your default branch (require a review before merge). The App can only ever create
+  a `deskmate/*` branch and open a PR — it cannot merge.
+
 ## Slack setup (Vercel Connect)
 
 Slack reaches the **deployed** project through
