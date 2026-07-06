@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/mama-sh/deskmate/compare/core-v0.2.0...core-v0.3.0) (2026-07-06)
+
+
+### Features
+
+* agentic coding for deskmates (clone → change → PR) ([#23](https://github.com/mama-sh/deskmate/issues/23)) ([7ddc23a](https://github.com/mama-sh/deskmate/commit/7ddc23aa333f1e8bbf880a3e07757be254f13aaa))
+
 ## [0.2.0](https://github.com/mama-sh/deskmate/compare/core-v0.1.0...core-v0.2.0) (2026-07-05)
 
 

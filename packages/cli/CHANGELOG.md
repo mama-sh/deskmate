@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/mama-sh/deskmate/compare/cli-v0.3.0...cli-v0.4.0) (2026-07-06)
+
+
+### Features
+
+* agentic coding for deskmates (clone → change → PR) ([#23](https://github.com/mama-sh/deskmate/issues/23)) ([7ddc23a](https://github.com/mama-sh/deskmate/commit/7ddc23aa333f1e8bbf880a3e07757be254f13aaa))
+* **cli:** connection doctor + deploy/scaffolding hardening ([#21](https://github.com/mama-sh/deskmate/issues/21)) ([9bc9452](https://github.com/mama-sh/deskmate/commit/9bc9452cafdfacc270524a408d1a0f184c1c8336))
+
 ## [0.3.0](https://github.com/mama-sh/deskmate/compare/cli-v0.2.0...cli-v0.3.0) (2026-07-05)
 
 
