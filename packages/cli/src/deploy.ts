@@ -25,13 +25,15 @@ const defaultDeps: DeployDeps = {
  * `deskmate deploy [...vercel-deploy-args]`: the known-good recipe to ship an eve
  * team to Vercel production.
  *
- *   sync → `vercel build` (experimental frameworks) → patch eve trace → `vercel deploy --prebuilt`
+ *   pull → sync → `vercel build` (experimental frameworks) → patch eve trace → `vercel deploy --prebuilt`
  *
  * Plain `vercel deploy` / `eve deploy` build a function that drops eve's internal
  * `#…` files (see `patchVercelEveTrace`) and 500s on every route. Building locally
  * and patching the output before a `--prebuilt` upload sidesteps that. Passthrough
- * args (e.g. `--yes`, `--token`, `--scope`) go to BOTH `vercel build` and
- * `vercel deploy` — the build runs first and needs the same auth/scope in CI.
+ * args (e.g. `--yes`, `--token`, `--scope`) go to `vercel pull`, `vercel build`, AND
+ * `vercel deploy` — each step needs the same auth/scope in CI. Note `vercel pull`
+ * accepts a narrower flag set than build/deploy, so a deploy-only flag like
+ * `--target` is rejected there first (harmless here — the recipe is `--prod`-pinned).
  *
  * Requires the Vercel CLI installed and authenticated (`vercel login`).
  */
@@ -40,6 +42,20 @@ export async function deploy(
   cwd: string = process.cwd(),
   deps: DeployDeps = defaultDeps,
 ): Promise<number> {
+  // Step 0: pull the production env so `vercel build` validates connections against
+  // the REAL deploy env, not a stale `.vercel/.env.production.local`. Fail-fast — a
+  // misconfigured connection URL/token surfaces here, locally, instead of shipping a
+  // bot that 500s on first use. The full passthrough reaches pull (it needs the same
+  // auth/scope in CI); the xfw env keeps framework/settings resolution consistent
+  // with the build below.
+  const pullCode = await deps.run(
+    "vercel",
+    ["pull", "--yes", "--environment=production", ...args],
+    cwd,
+    { VERCEL_USE_EXPERIMENTAL_FRAMEWORKS: "1" },
+  );
+  if (pullCode !== 0) return pullCode;
+
   await deps.sync(cwd);
 
   const buildCode = await deps.run("vercel", ["build", "--prod", ...args], cwd, {

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scaffoldConnectConnection } from "../src/mcp-add.js";
+import { scaffoldConnectConnection, scaffoldTokenConnection } from "../src/mcp-add.js";
 
 let dir: string;
 beforeEach(() => {
@@ -64,6 +64,37 @@ describe("scaffoldConnectConnection", () => {
     const file = join(dir, "connections", "vercel.ts");
     writeFileSync(file, "// hand-edited\n");
     scaffoldConnectConnection(spec, dir); // second call must skip
+    expect(readFileSync(file, "utf8")).toBe("// hand-edited\n");
+  });
+});
+
+describe("scaffoldTokenConnection", () => {
+  it("bearer scaffold writes an auth.getToken connection file + { kind:'mcp', env } config entry", () => {
+    const cfg = join(dir, "deskmate.config.ts");
+    writeFileSync(cfg, `import { defineTeam } from "@deskmate/core";\nexport default defineTeam({\n  connections: {\n  },\n  deskmates: {},\n});\n`);
+    scaffoldTokenConnection({ name: "acme", urlEnv: "ACME_MCP_URL", tokenEnv: "ACME_MCP_TOKEN", description: "Acme.", tools: ["search"] }, dir);
+    const src = readFileSync(join(dir, "connections", "acme.ts"), "utf8");
+    expect(src).toContain('auth: { getToken: async () => ({ token: process.env["ACME_MCP_TOKEN"] || "" }) }');
+    expect(readFileSync(cfg, "utf8")).toContain("env: \"ACME\"");
+  });
+
+  it("basic scaffold writes an Authorization: Basic header file", () => {
+    scaffoldTokenConnection({ name: "lf", urlEnv: "LF_MCP_URL", tokenEnv: "LF_MCP_TOKEN", description: "Langfuse.", tools: [], scheme: "basic" }, dir);
+    const src = readFileSync(join(dir, "connections", "lf.ts"), "utf8");
+    expect(src).toContain('Basic ${Buffer.from(process.env["LF_MCP_TOKEN"] || "").toString("base64")}');
+  });
+
+  it("custom-header scaffold uses the given header name", () => {
+    scaffoldTokenConnection({ name: "docs", urlEnv: "DOCS_MCP_URL", tokenEnv: "DOCS_MCP_TOKEN", description: "Docs.", tools: [], scheme: "custom-header", headerName: "X-Api-Key" }, dir);
+    const src = readFileSync(join(dir, "connections", "docs.ts"), "utf8");
+    expect(src).toContain('"X-Api-Key": process.env["DOCS_MCP_TOKEN"] || ""');
+  });
+
+  it("never clobbers an existing token connection file", () => {
+    scaffoldTokenConnection({ name: "acme", urlEnv: "ACME_MCP_URL", tokenEnv: "ACME_MCP_TOKEN", description: "d", tools: [] }, dir);
+    const file = join(dir, "connections", "acme.ts");
+    writeFileSync(file, "// hand-edited\n");
+    scaffoldTokenConnection({ name: "acme", urlEnv: "ACME_MCP_URL", tokenEnv: "ACME_MCP_TOKEN", description: "d", tools: [] }, dir);
     expect(readFileSync(file, "utf8")).toBe("// hand-edited\n");
   });
 });

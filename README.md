@@ -228,6 +228,7 @@ deskmate add customer_success       # copy roles/customer_success/ + append its 
 deskmate remove growth_hacker       # delete roles/growth_hacker/ + drop its config entry
 deskmate mcp-add <name>             # scaffold a read-only MCP connection into ./connections
 deskmate sync                       # regenerate agent/** from deskmate.config.ts
+deskmate doctor                     # check each MCP connection: reachable, authed, tools match
 ```
 
 `add`/`remove`/`mcp-add` only touch config and the authored `roles/`/`connections/`
@@ -258,6 +259,36 @@ starter already does; otherwise run `pnpm add @vercel/connect`.
 
 Token-based (API-key) MCP servers still use the `env` model: `deskmate mcp-add
 <name>` → **token**, then set `<PREFIX>_MCP_URL` / `<PREFIX>_MCP_TOKEN`.
+
+The token path also asks for an **auth scheme**, for servers that don't accept
+`Authorization: Bearer`:
+
+- **bearer** (default) — sends `Authorization: Bearer <PREFIX>_MCP_TOKEN`.
+- **basic** — for servers like Langfuse that require `Authorization: Basic
+  base64(publicKey:secretKey)`. Set `<PREFIX>_MCP_TOKEN` to the **plaintext**
+  `publicKey:secretKey`; the generated connection file base64-encodes it for you.
+- **custom-header** — sends `<PREFIX>_MCP_TOKEN` under a header name you pick (e.g.
+  `X-Api-Key`).
+
+All three reuse the same `<PREFIX>_MCP_URL` / `<PREFIX>_MCP_TOKEN` pair, so the config
+entry and `.env.example` are identical regardless of scheme.
+
+### Verify connections before deploy
+
+Run **`deskmate doctor`** (alias `deskmate check`) to validate every connection against
+its real server: is it reachable? does auth pass? and does each `tools.allow` name a
+tool the server actually exposes? A wrong tool name silently loads **zero** tools — a
+bot that looks connected but does nothing — so `doctor` is the fastest way to catch it.
+Run it after `vercel env pull` so it checks the real production env. It exits non-zero
+when a **wired** connection is unreachable, fails auth, or names a tool the server
+doesn't expose — so it doubles as a pre-deploy/CI gate. Connections that are simply
+unconfigured or not yet scaffolded, and oauth (Vercel Connect) connections whose
+credential is resolved at runtime, are reported as **warnings** and don't fail the run.
+
+> **Setting env vars non-interactively:** `vercel env add <NAME> <env>` reads the value
+> from **stdin only in an interactive terminal**. In agent/CI mode a piped value is
+> silently ignored and you get an empty variable — pass `--value` explicitly:
+> `vercel env add MIXPANEL_MCP_URL production --value "https://…"`.
 
 ### Edit or author a deskmate
 
@@ -356,9 +387,12 @@ that env var for you. So if your connector's UID is `slack/deskmate` you're done
 you used a different UID do you need to set it and redeploy:
 
 ```bash
-vercel env add SLACK_CONNECTOR production   # paste the connector UID from `vercel connect create`
-deskmate deploy                             # redeploy so the new env var takes effect
+vercel env add SLACK_CONNECTOR production --value <uid>   # the connector UID from `vercel connect create`
+deskmate deploy                                           # redeploy so the new env var takes effect
 ```
+
+> Use `--value` — in a non-interactive shell (agents, CI) `vercel env add` silently
+> ignores a stdin-piped value and stores an empty variable.
 
 Install the app as **Deskmate**, invite the bot to a channel, and tag `@deskmate`. Custom
 MCP connections are build-time: `deskmate mcp-add` writes a connection file and a config
