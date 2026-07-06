@@ -66,6 +66,13 @@ describe("deploy", () => {
     expect(provision).toBe("run:vercel deploy --yes [xfw]");
   });
 
+  it("coding team: preserves -t <token> (Vercel's --token shorthand) in the provision deploy", async () => {
+    const { deps, calls } = makeDeps([0, 0, 0, 0], { coding: true });
+    await deploy(["-t", "sekret", "--yes"], "/proj", deps);
+    const provision = calls.find((c) => c.startsWith("run:vercel deploy") && !c.includes("--prebuilt"));
+    expect(provision).toBe("run:vercel deploy -t sekret --yes [xfw]"); // -t is auth, not a target flag
+  });
+
   it("coding team: a failed final deploy returns non-zero and prints no reminder", async () => {
     const logs: string[] = [];
     const spy = vi.spyOn(console, "log").mockImplementation((m?: unknown) => {

@@ -31,14 +31,15 @@ const defaultDeps: DeployDeps = {
  * The provisioning deploy must stay an unaliased preview built from source — a leaked
  * `--prod`/`--target` would ship the un-patched (trace-broken) build to production, and
  * `--prebuilt` would defeat the whole point (no on-Vercel build → no prewarm). Auth/scope
- * flags (`--yes`, `--token`, `--scope`) pass through untouched.
+ * flags pass through untouched — note `-t` is Vercel's shorthand for `--token` (a global
+ * auth flag), NOT `--target` (which has no short form), so it must be preserved.
  */
 function provisionArgs(args: string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--prod" || a === "--prebuilt") continue;
-    if (a === "--target" || a === "-t") { i++; continue; } // skip the flag AND its value
+    if (a === "--target") { i++; continue; } // --target <value>: skip the flag AND its value
     if (a.startsWith("--target=")) continue;
     out.push(a);
   }
