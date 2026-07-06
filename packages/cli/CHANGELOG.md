@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/mama-sh/deskmate/compare/cli-v0.4.0...cli-v0.5.0) (2026-07-06)
+
+
+### Features
+
+* **cli:** deploy provisions coding/channel sandbox templates before --prebuilt ([#24](https://github.com/mama-sh/deskmate/issues/24)) ([4f7a9d8](https://github.com/mama-sh/deskmate/commit/4f7a9d84d91ffbdb14b5c6c0704ce73f76163774))
+
 ## [0.4.0](https://github.com/mama-sh/deskmate/compare/cli-v0.3.0...cli-v0.4.0) (2026-07-06)
 
 
