@@ -254,6 +254,47 @@ export default createMemoryReflection(${JSON.stringify(deskmateIds)}, await reso
 }
 
 /**
+ * `agent/subagents/<id>/sandbox.ts` — the coding deskmate's own sandbox (subagents
+ * own their sandbox, they don't inherit the root's). Bound to the team's github org
+ * so `onSession` can broker that org's installation token at the firewall. All logic
+ * lives in `@deskmate/core/coding`. Emitted only for a `coding`-enabled deskmate.
+ */
+export function renderCodingSandbox(coding: { org: string }): string {
+  return `${BANNER}
+import { createCodingSandbox } from "@deskmate/core/coding";
+
+export default createCodingSandbox(${JSON.stringify({ org: coding.org })});
+`;
+}
+
+/**
+ * `agent/subagents/<id>/tools/open_pull_request.ts` — the approval-gated push+PR
+ * tool bound to this deskmate id + the team org and the deskmate's repo allowlist.
+ */
+export function renderCodingTool(id: string, coding: { org: string; repos: string[] }): string {
+  return `${BANNER}
+import { createOpenPullRequestTool } from "@deskmate/core/coding";
+
+export default createOpenPullRequestTool(${JSON.stringify({ deskmateId: id, org: coding.org, repos: coding.repos })});
+`;
+}
+
+/**
+ * `agent/subagents/<id>/instructions/coding.ts` — the static coding safety rules as
+ * a coexisting instructions module (like memory's `instructions/memory.ts`, but
+ * static rather than per-turn dynamic). eve reads `instructions/*` beside the root
+ * `instructions.md`, so these rules hold even if a role's own instructions are terse.
+ */
+export function renderCodingInstructions(): string {
+  return `${BANNER}
+import { defineInstructions } from "eve/instructions";
+import { createCodingInstructions } from "@deskmate/core/coding";
+
+export default defineInstructions({ markdown: createCodingInstructions() });
+`;
+}
+
+/**
  * A TODO-stub connection, emitted when a deskmate `reads` a connection but no
  * authored file (`roles/<id>/connections/<name>.ts` or shared `connections/<name>.ts`)
  * exists. It is a valid eve connection so `eve build` doesn't crash on a dangling

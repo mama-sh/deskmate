@@ -18,6 +18,9 @@ import {
   renderMemoryTool,
   renderMemoryInstructions,
   renderMemoryReflectionSchedule,
+  renderCodingSandbox,
+  renderCodingTool,
+  renderCodingInstructions,
 } from "../src/sync/render.js";
 
 // A minimal, hand-built TeamConfig fixture (two deskmates, two mcp connections).
@@ -346,5 +349,31 @@ describe("renderStubConnection", () => {
     expect(out).toContain('auth: connect({ connector: "vercel/deskmate", principalType: "app" })');
     expect(out).not.toContain("process.env");
     expect(out).toContain("deskmate connect vercel");
+  });
+});
+
+describe("coding renderers", () => {
+  it("renders a sandbox shim bound to the team org", () => {
+    const s = renderCodingSandbox({ org: "acme" });
+    expect(s).toContain(BANNER);
+    expect(s).toContain('from "@deskmate/core/coding"');
+    expect(s).toContain("createCodingSandbox");
+    expect(s).toContain('"acme"');
+  });
+
+  it("renders the open_pull_request tool shim bound to id/org/repos", () => {
+    const t = renderCodingTool("engineer", { org: "acme", repos: ["acme/*"] });
+    expect(t).toContain("createOpenPullRequestTool");
+    expect(t).toContain('"engineer"');
+    expect(t).toContain('"acme"');
+    expect(t).toContain('"acme/*"');
+    expect(t).toContain("export default");
+  });
+
+  it("renders the static coding instructions module", () => {
+    const i = renderCodingInstructions();
+    expect(i).toContain('from "eve/instructions"');
+    expect(i).toContain("defineInstructions");
+    expect(i).toContain("createCodingInstructions");
   });
 });
