@@ -1,6 +1,8 @@
+import type { TeamConfig } from "@deskmate/core";
 import { syncCommand } from "./sync/index.js";
 import { patchVercelEveTrace } from "./lib/vercel-trace.js";
 import { runCommand } from "./lib/run.js";
+import { loadTeam } from "./lib/load-config.js";
 
 // Re-exported so both `deskmate deploy` and `deskmate connect` share one spawn
 // seam (see `./lib/run.ts`); `deploy.test.ts` keeps importing it from here.
@@ -8,6 +10,8 @@ export { runCommand } from "./lib/run.js";
 
 /** Side effects `deploy()` needs — injected so the orchestration is unit-testable. */
 export interface DeployDeps {
+  /** Load + validate the team config (to detect whether any deskmate has `coding`). */
+  loadTeam: (cwd: string) => Promise<TeamConfig>;
   sync: (cwd: string, opts?: { quiet?: boolean }) => Promise<void>;
   /** Run a command to completion; resolves with its exit code. */
   run: (cmd: string, args: string[], cwd: string, env?: Record<string, string>) => Promise<number>;
@@ -16,6 +20,7 @@ export interface DeployDeps {
 }
 
 const defaultDeps: DeployDeps = {
+  loadTeam,
   sync: syncCommand,
   run: runCommand,
   patch: patchVercelEveTrace,
@@ -57,6 +62,28 @@ export async function deploy(
   if (pullCode !== 0) return pullCode;
 
   await deps.sync(cwd);
+
+  // eve provisions ("prewarms") each coding deskmate's Vercel Sandbox template only during a
+  // build that runs ON Vercel (it gates on VERCEL_DEPLOYMENT_ID). Our LOCAL `vercel build` +
+  // `--prebuilt` upload therefore references templates that were never created → the deskmate
+  // throws SandboxTemplateNotProvisionedError on its first coding turn. So for a coding team,
+  // first run a SOURCE `vercel deploy` (no --prebuilt, no --prod) — Vercel builds it and eve
+  // prewarms the team-scoped templates — then the prebuilt prod deploy below resolves them by
+  // content hash. Non-coding teams have no sandboxes and skip this entirely.
+  const team = await deps.loadTeam(cwd);
+  const hasCoding = Object.values(team.deskmates).some((d) => d.coding);
+  if (hasCoding) {
+    const provisionCode = await deps.run("vercel", ["deploy", ...args], cwd, {
+      VERCEL_USE_EXPERIMENTAL_FRAMEWORKS: "1",
+    });
+    // A non-zero exit means the on-Vercel build failed — abort rather than ship a coding bot
+    // whose sandboxes aren't provisioned (turns a silent runtime crash into a deploy error).
+    if (provisionCode !== 0) return provisionCode;
+    console.log(
+      "✓ provisioned coding sandbox templates via a source build " +
+        "(the preview 500s harmlessly and is unaliased — `vercel remove` it if you like).",
+    );
+  }
 
   const buildCode = await deps.run("vercel", ["build", "--prod", ...args], cwd, {
     VERCEL_USE_EXPERIMENTAL_FRAMEWORKS: "1",

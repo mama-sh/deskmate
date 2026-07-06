@@ -1,10 +1,17 @@
 import { describe, it, expect, vi } from "vitest";
+import type { TeamConfig } from "@deskmate/core";
 import { deploy, runCommand, type DeployDeps } from "../src/deploy.js";
 
-function makeDeps(runCodes: number[] = [0, 0]) {
+function makeDeps(runCodes: number[] = [0, 0], opts: { coding?: boolean } = {}) {
   const calls: string[] = [];
   const queue = [...runCodes];
+  // loadTeam is a read (not an ordered side effect), so it does NOT push to `calls` —
+  // the existing sequence assertions stay valid for a non-coding team.
+  const team = {
+    deskmates: opts.coding ? { engineer: { coding: { repos: [] } } } : { devops: {} },
+  } as unknown as TeamConfig;
   const deps: DeployDeps = {
+    loadTeam: vi.fn(async () => team),
     sync: vi.fn(async () => {
       calls.push("sync");
     }),
@@ -34,6 +41,32 @@ describe("deploy", () => {
       "patch",
       "run:vercel deploy --prebuilt --prod --yes",
     ]);
+  });
+
+  it("coding team: provisions via a SOURCE vercel deploy after sync, before the local build", async () => {
+    const { deps, calls } = makeDeps([0, 0, 0, 0], { coding: true }); // pull, provision, build, deploy
+    const code = await deploy(["--yes"], "/proj", deps);
+    expect(code).toBe(0);
+    expect(calls).toEqual([
+      "run:vercel pull --yes --environment=production --yes [xfw]",
+      "sync",
+      "run:vercel deploy --yes [xfw]", // SOURCE provisioning: no --prebuilt, no --prod
+      "run:vercel build --prod --yes [xfw]",
+      "patch",
+      "run:vercel deploy --prebuilt --prod --yes",
+    ]);
+  });
+
+  it("coding team: a failed provisioning deploy short-circuits (no build, no patch, no prebuilt deploy)", async () => {
+    const { deps, calls } = makeDeps([0, 5], { coding: true }); // pull ok, provision exits 5
+    const code = await deploy([], "/proj", deps);
+    expect(code).toBe(5);
+    expect(calls).toEqual([
+      "run:vercel pull --yes --environment=production [xfw]",
+      "sync",
+      "run:vercel deploy [xfw]",
+    ]);
+    expect(deps.patch).not.toHaveBeenCalled();
   });
 
   it("short-circuits (no patch, no deploy) when the build fails", async () => {
