@@ -279,8 +279,11 @@ Run **`deskmate doctor`** (alias `deskmate check`) to validate every connection 
 its real server: is it reachable? does auth pass? and does each `tools.allow` name a
 tool the server actually exposes? A wrong tool name silently loads **zero** tools — a
 bot that looks connected but does nothing — so `doctor` is the fastest way to catch it.
-Run it after `vercel env pull` so it checks the real production env; it exits non-zero
-if any connection is broken, so it doubles as a pre-deploy/CI gate.
+Run it after `vercel env pull` so it checks the real production env. It exits non-zero
+when a **wired** connection is unreachable, fails auth, or names a tool the server
+doesn't expose — so it doubles as a pre-deploy/CI gate. Connections that are simply
+unconfigured or not yet scaffolded, and oauth (Vercel Connect) connections whose
+credential is resolved at runtime, are reported as **warnings** and don't fail the run.
 
 > **Setting env vars non-interactively:** `vercel env add <NAME> <env>` reads the value
 > from **stdin only in an interactive terminal**. In agent/CI mode a piped value is

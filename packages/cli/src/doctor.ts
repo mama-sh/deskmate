@@ -59,6 +59,13 @@ export function loadLocalEnv(cwd: string): string | null {
  * shared `connections/<name>.ts`. Matching the order matters — when a role-local file
  * shadows a shared one of the same name, sync deploys the role-local file, so doctor
  * must probe that same file or it validates something the deploy never runs.
+ *
+ * Known limitation: doctor validates ONE authored file per connection *name*. `sync`
+ * resolves per deskmate's role, so if the same name resolves to different files for
+ * different deskmates (a shared file for some, a role-local override for others, or
+ * distinct overrides across roles) only the first — role-local, then alphabetical — is
+ * probed; the other deployed variants aren't verified. The one-file-per-name catalog
+ * layout doesn't hit this; full per-deskmate coverage is a possible follow-up.
  */
 export function findConnectionFile(name: string, cwd: string): string | null {
   const rolesDir = join(cwd, "roles");

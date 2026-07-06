@@ -15,22 +15,28 @@ async function readJsonRpc(res: Response): Promise<any> {
   const ct = res.headers.get("content-type") ?? "";
   const text = await res.text();
   if (ct.includes("text/event-stream")) {
-    // Concatenate `data:` lines; the JSON-RPC response is the last frame that
-    // carries a `result`/`error` (the server may interleave notifications first).
-    const datas = text
-      .split(/\r?\n/)
-      .filter((l) => l.startsWith("data:"))
-      .map((l) => l.slice(5).trim())
-      .filter(Boolean);
-    for (let i = datas.length - 1; i >= 0; i--) {
+    // Parse SSE events (blank-line separated). Within one event, join its `data:` lines
+    // with "\n" to reassemble the payload — the SSE spec allows a single message to span
+    // multiple `data:` lines — then JSON-parse. Return the last event carrying a JSON-RPC
+    // result/error (a server may interleave notification frames before the response).
+    const msgs: any[] = [];
+    for (const ev of text.split(/\r?\n\r?\n/)) {
+      const data = ev
+        .split(/\r?\n/)
+        .filter((l) => l.startsWith("data:"))
+        .map((l) => l.slice(5).replace(/^ /, "")) // strip one optional leading space per the spec
+        .join("\n");
+      if (!data) continue;
       try {
-        const obj = JSON.parse(datas[i]!);
-        if (obj && (obj.result !== undefined || obj.error !== undefined)) return obj;
+        msgs.push(JSON.parse(data));
       } catch {
-        /* keep scanning earlier frames */
+        /* skip a non-JSON event */
       }
     }
-    return datas.length ? JSON.parse(datas[datas.length - 1]!) : {};
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i] && (msgs[i].result !== undefined || msgs[i].error !== undefined)) return msgs[i];
+    }
+    return msgs.length ? msgs[msgs.length - 1] : {};
   }
   return text ? JSON.parse(text) : {};
 }

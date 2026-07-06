@@ -35,6 +35,20 @@ describe("probeMcp", () => {
     expect(r.tools).toEqual(["only"]);
   });
 
+  it("reassembles a JSON-RPC message split across multiple SSE data: lines", async () => {
+    const fetchImpl = async (_url: string, opts: any) => {
+      const method = JSON.parse(opts.body).method;
+      if (method === "initialize") return resp({ jsonrpc: "2.0", id: 1, result: {} });
+      if (method === "notifications/initialized") return new Response(null, { status: 202 });
+      // Pretty-printed JSON (real newlines) emitted one line per SSE `data:` field.
+      const pretty = JSON.stringify({ jsonrpc: "2.0", id: 2, result: { tools: [{ name: "split" }] } }, null, 2);
+      const body = "event: message\n" + pretty.split("\n").map((l) => `data: ${l}`).join("\n") + "\n\n";
+      return new Response(body, { status: 200, headers: new Headers({ "content-type": "text/event-stream" }) });
+    };
+    const r = await probeMcp("https://x/mcp", {}, fetchImpl as any);
+    expect(r.tools).toEqual(["split"]);
+  });
+
   it("reports auth failure on a 401", async () => {
     const fetchImpl = async () => new Response("unauthorized", { status: 401 });
     const r = await probeMcp("https://x/mcp", {}, fetchImpl as any);
