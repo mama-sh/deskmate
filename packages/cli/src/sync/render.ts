@@ -137,6 +137,21 @@ export function renderEveChannel(): string {
   return renderReexport("@deskmate/core/channels/eve");
 }
 
+/**
+ * `agent/channels/github.ts` — eve's GitHub App channel (root-only), emitted when
+ * `github.channel` is set. An `@mention` on an issue/PR auto-checks-out the repo into
+ * the sandbox; eve handles commit/push with the installation token brokered at the
+ * firewall. Auth comes from GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY / GITHUB_WEBHOOK_SECRET
+ * (the channel's defaults), so the shim needs no config.
+ */
+export function renderGithubChannel(): string {
+  return `${BANNER}
+import { githubChannel } from "eve/channels/github";
+
+export default githubChannel();
+`;
+}
+
 /** `agent/channels/deskmate-avatars.ts` — re-export core's avatar channel. */
 export function renderAvatarsChannel(): string {
   return renderReexport("@deskmate/core/channels/deskmate-avatars");
@@ -391,10 +406,12 @@ ${oauth.join("\n")}`
 # DATABASE_URL=postgres://...`
     : "";
 
-  // Only surface the GitHub App vars when ≥1 deskmate opts into coding. The App
-  // brokers a short-lived install token for git; requires the Vercel backend to push.
+  // Surface the GitHub App vars when ≥1 deskmate opts into coding OR the root GitHub
+  // channel is mounted. The App brokers a short-lived install token for git; pushing
+  // requires the Vercel backend.
   const anyCoding = Object.values(team.deskmates).some((d) => d.coding);
-  const coding = anyCoding
+  const needsGithubApp = anyCoding || team.github?.channel === true;
+  const coding = needsGithubApp
     ? `\n\n# ── Coding deskmates (GitHub App) ─────────────────────────────────────────
 # A coding deskmate clones/pushes via a GitHub App installed on org "${team.github?.org ?? "<org>"}".
 # Create + install the App (grant contents:write + pull_requests:write), then set:

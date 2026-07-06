@@ -418,6 +418,12 @@ Two things to know:
   protect your default branch (require a review before merge). The App can only ever create
   a `deskmate/*` branch and open a PR — it cannot merge.
 
+**GitHub-native surface (optional).** Set `github: { org, channel: true }` to also mount
+eve's GitHub App channel: `@mention` the bot on an issue or PR and it checks the repo out,
+works in-thread, and commits/pushes with the same firewall-brokered token. It reuses the
+same App (add `GITHUB_WEBHOOK_SECRET` and point the App's webhook at `/eve/v1/github`). This
+is additive to the Slack-initiated coding above.
+
 ## Slack setup (Vercel Connect)
 
 Slack reaches the **deployed** project through

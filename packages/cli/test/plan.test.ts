@@ -318,6 +318,28 @@ describe("planSync", () => {
     }
   });
 
+  it("emits the root github channel when github.channel is set", () => {
+    const t = { ...fixtureTeam, github: { org: "acme", channel: true } } as unknown as TeamConfig;
+    const plan = planSync(t, cwd);
+    expect(find(plan, "agent/channels/github.ts")?.contents).toContain("githubChannel()");
+  });
+
+  it("does not emit the github channel without github.channel", () => {
+    const t = { ...fixtureTeam, github: { org: "acme" } } as unknown as TeamConfig;
+    expect(paths(planSync(t, cwd)).some((p) => p.endsWith("agent/channels/github.ts"))).toBe(false);
+  });
+
+  it("deletes a stale generated github channel when github.channel is off", () => {
+    const rel = "agent/channels/github.ts";
+    mkdirSync(join(cwd, "agent/channels"), { recursive: true });
+    writeFileSync(join(cwd, rel), "// stale\n");
+    try {
+      expect(planSync(fixtureTeam, cwd).deletes).toContain(join(cwd, rel));
+    } finally {
+      rmSync(join(cwd, rel), { force: true });
+    }
+  });
+
   it("emits the root reflection schedule exactly once with the enabled ids + configured cron", () => {
     const plan = planSync(memoryTeam, cwd);
     const sched = find(plan, "agent/schedules/memory-reflection.ts");

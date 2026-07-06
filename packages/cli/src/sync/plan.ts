@@ -16,6 +16,7 @@ import {
   renderCodingInstructions,
   renderCodingSandbox,
   renderCodingTool,
+  renderGithubChannel,
   renderRootAgent,
   renderRosterRegistry,
   renderSlackAmbientChannel,
@@ -218,6 +219,17 @@ export function planSync(team: TeamConfig, cwd: string): SyncPlan {
       );
     }
   }
+  // ── Phase-2 GitHub channel (root-only) ──────────────────────────────────────
+  // Mounted when `github.channel` is set: @mentions on issues/PRs get an eve
+  // auto-checkout + commit/push with the firewall-brokered install token. sync OWNS
+  // agent/**, so when the flag is off we DELETE any previously generated channel file.
+  const githubChannelPath = join(cwd, "agent", "channels", "github.ts");
+  if (team.github?.channel) {
+    out("agent/channels/github.ts", renderGithubChannel());
+  } else if (existsSync(githubChannelPath)) {
+    deletes.push(githubChannelPath);
+  }
+
   const sweepPath = join(cwd, "agent", "schedules", "deskmate-sweep.ts");
   if (digestChannels.some(([, r]) => r.watch?.post === true)) {
     out("agent/schedules/deskmate-sweep.ts", renderDeskmateSweepSchedule(team));

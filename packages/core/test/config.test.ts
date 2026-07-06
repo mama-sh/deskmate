@@ -205,6 +205,11 @@ describe("coding config", () => {
     expect(t.github).toEqual({ org: "acme" });
   });
 
+  it("accepts an optional github.channel flag", () => {
+    const t = defineTeam({ github: { org: "acme", channel: true }, deskmates: {} });
+    expect(t.github).toEqual({ org: "acme", channel: true });
+  });
+
   it("rejects a coding deskmate when the team has no github block", () => {
     expect(() => defineTeam({ deskmates: { engineer: { ...eng, coding: true } } })).toThrow(/github/i);
   });

@@ -13,8 +13,9 @@ export default defineTeam({
 
   // GitHub App wiring for coding deskmates (see the `engineer` entry below).
   // Only the org lives here; the App secrets come from env (GITHUB_APP_ID /
-  // GITHUB_APP_PRIVATE_KEY). Uncomment + set your org to enable coding.
-  // github: { org: "your-org" },
+  // GITHUB_APP_PRIVATE_KEY). Uncomment + set your org to enable coding. Add
+  // `channel: true` to also mount eve's GitHub channel (@mentions on issues/PRs).
+  // github: { org: "your-org" /*, channel: true */ },
 
   // External data each deskmate can read. `kind: "mcp"` connections map to an
   // <ENV>_MCP_URL / <ENV>_MCP_TOKEN pair (see the generated .env.example).

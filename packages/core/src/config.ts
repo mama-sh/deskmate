@@ -86,7 +86,8 @@ const TeamConfig = z.object({
   // GitHub App wiring for coding deskmates. Only the non-secret `org` lives here; the
   // App secrets (GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY / GITHUB_WEBHOOK_SECRET) come
   // from env, like MCP connection tokens. A deskmate with `coding` enabled requires it.
-  github: z.object({ org: z.string().min(1) }).optional(),
+  // `channel: true` also mounts eve's root GitHub App channel (@mentions on issues/PRs).
+  github: z.object({ org: z.string().min(1), channel: z.boolean().optional() }).optional(),
   connections: z.record(z.string(), ConnectionConfig).default({}),
   deskmates: z.record(z.string(), DeskmateConfig).default({}),
   channels: z.record(z.string(), ChannelRoute).default({}),

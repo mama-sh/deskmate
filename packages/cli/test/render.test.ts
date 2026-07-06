@@ -21,6 +21,7 @@ import {
   renderCodingSandbox,
   renderCodingTool,
   renderCodingInstructions,
+  renderGithubChannel,
 } from "../src/sync/render.js";
 
 // A minimal, hand-built TeamConfig fixture (two deskmates, two mcp connections).
@@ -377,6 +378,14 @@ describe("coding renderers", () => {
     expect(i).toContain("createCodingInstructions");
   });
 
+  it("renders the root github channel shim", () => {
+    const c = renderGithubChannel();
+    expect(c).toContain(BANNER);
+    expect(c).toContain('from "eve/channels/github"');
+    expect(c).toContain("githubChannel()");
+    expect(c).toContain("export default");
+  });
+
   it("includes GITHUB_APP_* in .env.example only when a deskmate has coding", () => {
     const withCoding = {
       ...fixtureTeam,
@@ -400,5 +409,12 @@ describe("coding renderers", () => {
     expect(s).toContain("GITHUB_TOKEN"); // commented local-only fallback
 
     expect(renderEnvExample(fixtureTeam)).not.toContain("GITHUB_APP_ID");
+  });
+
+  it("includes GITHUB_APP_* when only the github channel is enabled (no coding deskmate)", () => {
+    const channelOnly = { ...fixtureTeam, github: { org: "acme", channel: true } } as unknown as TeamConfig;
+    const s = renderEnvExample(channelOnly);
+    expect(s).toContain("GITHUB_APP_ID");
+    expect(s).toContain("GITHUB_WEBHOOK_SECRET");
   });
 });
