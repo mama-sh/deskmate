@@ -5,11 +5,13 @@ export {
   type GithubAppDeps,
   type InstallTokenScope,
 } from "./github-app.js";
-export { createCodingSandbox, type CodingSandboxOptions } from "./sandbox.js";
+export { createCodingSandbox, sandboxRepoScope, type CodingSandboxOptions } from "./sandbox.js";
 export {
   createOpenPullRequestTool,
   submitPullRequest,
   readSandboxChanges,
+  readSandboxOrigin,
+  parseGithubRepo,
   commitViaApi,
   type SubmitInput,
   type SubmitDeps,

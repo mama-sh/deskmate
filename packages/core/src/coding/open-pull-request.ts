@@ -23,6 +23,8 @@ export interface ChangedFile {
 }
 
 export interface SubmitDeps {
+  /** The "owner/name" the sandbox has checked out (its `origin`), or null. */
+  getOriginRepo: () => Promise<string | null>;
   /** The repo's default branch (used as the PR base when none is given). */
   getDefaultBranch: (repo: string) => Promise<string>;
   /** The net changed files on the sandbox's HEAD vs `base` (read-only). */
@@ -37,6 +39,12 @@ export interface SubmitDeps {
 const SAFE_FEATURE_BRANCH = /^deskmate\/[A-Za-z0-9._/-]+$/;
 // owner/name, safe chars, exactly two segments.
 const SAFE_REPO = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+
+/** Extract owner/name from a github remote url (https or ssh form), else null. */
+export function parseGithubRepo(url: string): string | null {
+  const m = url.trim().match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?\/?$/i);
+  return m ? `${m[1]}/${m[2]}` : null;
+}
 
 /** owner/name glob match: "acme/*" (any repo in owner) or "acme/api" (exact). */
 function repoAllowed(repo: string, allowlist: string[]): boolean {
@@ -67,6 +75,16 @@ export async function submitPullRequest(input: SubmitInput, deps: SubmitDeps): P
   }
   if (!repoAllowed(input.repo, input.allowlist)) {
     throw new Error(`repo "${input.repo}" is not in the coding allowlist (${input.allowlist.join(", ") || "none"})`);
+  }
+  // The diff is read from whatever the sandbox has checked out and committed to
+  // input.repo — so verify the sandbox `origin` IS the approved repo, or a repo-A
+  // checkout could be applied to repo B (cross-repo leak) despite the allowlist.
+  const originRepo = await deps.getOriginRepo();
+  if (!originRepo || originRepo.toLowerCase() !== input.repo.toLowerCase()) {
+    throw new Error(
+      `the sandbox has "${originRepo ?? "no origin"}" checked out, but the approved repo is ` +
+        `"${input.repo}" — refusing to apply a diff across repos`,
+    );
   }
   const base = input.base ?? (await deps.getDefaultBranch(input.repo));
   if (input.branch === base) {
@@ -128,6 +146,13 @@ export async function readSandboxChanges(sandbox: SandboxLike, base: string): Pr
 async function readFileEntry(sandbox: SandboxLike, path: string): Promise<ChangedFile> {
   const bytes = await sandbox.readBinaryFile({ path });
   return { path, content: Buffer.from(bytes).toString("base64"), encoding: "base64", mode: "100644" };
+}
+
+/** The "owner/name" the sandbox has checked out (its `origin` remote), or null. */
+export async function readSandboxOrigin(sandbox: SandboxLike): Promise<string | null> {
+  const res = await sandbox.run({ command: "git remote get-url origin" });
+  if (res.exitCode !== 0) return null;
+  return parseGithubRepo(res.stdout);
 }
 
 interface TreeEntry {
@@ -239,6 +264,7 @@ export function createOpenPullRequestTool(opts: OpenPullRequestToolOptions) {
           return new Octokit({ auth: token });
         })());
       const deps: SubmitDeps = {
+        getOriginRepo: () => readSandboxOrigin(sandbox),
         getDefaultBranch: async (repo) => {
           const [owner, name] = repo.split("/");
           const octo = await octokitFor(name);

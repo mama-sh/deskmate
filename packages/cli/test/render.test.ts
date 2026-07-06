@@ -354,12 +354,13 @@ describe("renderStubConnection", () => {
 });
 
 describe("coding renderers", () => {
-  it("renders a sandbox shim bound to the team org", () => {
-    const s = renderCodingSandbox({ org: "acme" });
+  it("renders a sandbox shim bound to the team org + repo allowlist", () => {
+    const s = renderCodingSandbox({ org: "acme", repos: ["acme/*"] });
     expect(s).toContain(BANNER);
     expect(s).toContain('from "@deskmate/core/coding"');
     expect(s).toContain("createCodingSandbox");
     expect(s).toContain('"acme"');
+    expect(s).toContain('"acme/*"'); // repos threaded through for read-token scoping
   });
 
   it("renders the open_pull_request tool shim bound to id/org/repos", () => {

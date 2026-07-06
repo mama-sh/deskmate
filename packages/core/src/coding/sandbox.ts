@@ -4,12 +4,28 @@ import { getInstallationToken, readGithubAppEnv } from "./github-app.js";
 export interface CodingSandboxOptions {
   /** The single GitHub org whose installation token is brokered for git. */
   org: string;
+  /** The deskmate's coding.repos allowlist — the read token is scoped to these. */
+  repos: string[];
   /**
    * Test seam. Defaults to minting an installation token for `org` from the App
    * env, or `null` when the App isn't configured (local dev) — in which case there
    * is nothing to broker and egress is left at the backend default.
    */
   getToken?: () => Promise<string | null>;
+}
+
+/**
+ * The exact repositoryNames to scope the sandbox's read token to — so the model can
+ * only clone the deskmate's allowlisted repos, not every repo the App can read.
+ * Returns undefined (org-wide read) when the allowlist is empty or contains an owner
+ * glob like "org/*" (which already permits the whole org, and repositoryNames can't
+ * express "all").
+ */
+export function sandboxRepoScope(repos: string[]): string[] | undefined {
+  if (repos.length === 0) return undefined;
+  if (repos.some((r) => r.includes("*"))) return undefined;
+  const names = repos.map((r) => r.split("/")[1]).filter((n): n is string => Boolean(n));
+  return names.length ? names : undefined;
 }
 
 /**
@@ -42,12 +58,15 @@ export function createCodingSandbox(opts: CodingSandboxOptions) {
       // READ-ONLY token: the sandbox is the untrusted execution plane, so it only
       // gets clone/fetch access. Writes never happen here — the approval-gated
       // open_pull_request tool creates the commit + PR from the trusted runtime with
-      // a separate write token (control-plane / execution-plane separation).
+      // a separate write token (control-plane / execution-plane separation). The read
+      // token is scoped to the deskmate's allowlisted repos so the model can't clone
+      // other private repos the App can read.
       return getInstallationToken({
         appId: env.appId,
         privateKey: env.privateKey,
         org: opts.org,
         permissions: { contents: "read", metadata: "read" },
+        repositoryNames: sandboxRepoScope(opts.repos),
       });
     });
 

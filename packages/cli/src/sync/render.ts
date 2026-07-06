@@ -274,11 +274,11 @@ export default createMemoryReflection(${JSON.stringify(deskmateIds)}, await reso
  * so `onSession` can broker that org's installation token at the firewall. All logic
  * lives in `@deskmate/core/coding`. Emitted only for a `coding`-enabled deskmate.
  */
-export function renderCodingSandbox(coding: { org: string }): string {
+export function renderCodingSandbox(coding: { org: string; repos: string[] }): string {
   return `${BANNER}
 import { createCodingSandbox } from "@deskmate/core/coding";
 
-export default createCodingSandbox(${JSON.stringify({ org: coding.org })});
+export default createCodingSandbox(${JSON.stringify({ org: coding.org, repos: coding.repos })});
 `;
 }
 

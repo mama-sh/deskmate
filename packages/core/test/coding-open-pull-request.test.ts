@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import {
   submitPullRequest,
   readSandboxChanges,
+  readSandboxOrigin,
+  parseGithubRepo,
   commitViaApi,
   type ChangedFile,
 } from "../src/coding/open-pull-request.js";
@@ -19,6 +21,7 @@ const oneChange: ChangedFile[] = [{ path: "a.ts", content: "AAA", encoding: "bas
 
 function okDeps() {
   return {
+    getOriginRepo: vi.fn().mockResolvedValue("acme/api"),
     getDefaultBranch: vi.fn().mockResolvedValue("main"),
     readChangedFiles: vi.fn().mockResolvedValue(oneChange),
     pushCommit: vi.fn().mockResolvedValue(undefined),
@@ -67,6 +70,14 @@ describe("submitPullRequest guards", () => {
     await expect(submitPullRequest(base, deps)).rejects.toThrow(/no changes/i);
     expect(deps.pushCommit).not.toHaveBeenCalled();
     expect(deps.openPr).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the sandbox has a DIFFERENT repo checked out than the approved one", async () => {
+    const deps = okDeps();
+    deps.getOriginRepo.mockResolvedValueOnce("acme/other");
+    await expect(submitPullRequest(base, deps)).rejects.toThrow(/refusing to apply a diff across repos/i);
+    expect(deps.readChangedFiles).not.toHaveBeenCalled();
+    expect(deps.pushCommit).not.toHaveBeenCalled();
   });
 });
 
@@ -159,5 +170,30 @@ describe("commitViaApi", () => {
     );
     expect(api.createCommit).toHaveBeenCalledWith("msg", "newtree", ["basesha"]);
     expect(api.upsertBranchRef).toHaveBeenCalledWith("deskmate/e/x", "newcommit");
+  });
+});
+
+describe("readSandboxOrigin", () => {
+  it("returns the owner/name of the sandbox origin remote", async () => {
+    const sandbox = {
+      run: vi.fn().mockResolvedValue({ stdout: "https://github.com/acme/api.git\n", exitCode: 0 }),
+      readBinaryFile: vi.fn(),
+    };
+    expect(await readSandboxOrigin(sandbox)).toBe("acme/api");
+    expect(sandbox.run).toHaveBeenCalledWith({ command: "git remote get-url origin" });
+  });
+
+  it("returns null when there is no origin", async () => {
+    const sandbox = { run: vi.fn().mockResolvedValue({ stdout: "", exitCode: 128 }), readBinaryFile: vi.fn() };
+    expect(await readSandboxOrigin(sandbox)).toBeNull();
+  });
+});
+
+describe("parseGithubRepo", () => {
+  it("parses https and ssh github remotes to owner/name", () => {
+    expect(parseGithubRepo("https://github.com/acme/api.git")).toBe("acme/api");
+    expect(parseGithubRepo("https://github.com/acme/api")).toBe("acme/api");
+    expect(parseGithubRepo("git@github.com:acme/api.git")).toBe("acme/api");
+    expect(parseGithubRepo("https://gitlab.com/acme/api.git")).toBeNull();
   });
 });
