@@ -19,8 +19,13 @@ export interface DoctorDeps {
   probe: (url: string, headers: Record<string, string>) => Promise<ProbeResult>;
   /** Load the pulled Vercel env into process.env; returns the file loaded, or null. */
   loadEnv: (cwd: string) => string | null;
-  /** Best-effort: verify the GitHub App can mint an install token for a coding org. */
-  checkCodingAuth: (org: string) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Best-effort: verify the GitHub App can mint an install token for a coding org,
+   * scoped to `repositoryNames` when given (matches the repo-scoped token the sandbox
+   * / PR tool mint at runtime, so a repo-selective install that can't reach an exact
+   * allowlisted repo is caught here rather than at runtime).
+   */
+  checkCodingAuth: (org: string, repositoryNames?: string[]) => Promise<{ ok: boolean; error?: string }>;
 }
 
 /**
@@ -130,11 +135,11 @@ async function resolveConnectionReal(name: string, cwd: string): Promise<Resolve
  * an installation token (which also proves the App is installed on the org and the
  * private key parses). Never throws — a failure is reported, not fatal.
  */
-async function checkCodingAuthReal(org: string): Promise<{ ok: boolean; error?: string }> {
+async function checkCodingAuthReal(org: string, repositoryNames?: string[]): Promise<{ ok: boolean; error?: string }> {
   const env = readGithubAppEnv();
   if (!env.present) return { ok: false, error: "set GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY" };
   try {
-    await getInstallationToken({ appId: env.appId, privateKey: env.privateKey, org });
+    await getInstallationToken({ appId: env.appId, privateKey: env.privateKey, org, repositoryNames });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -255,7 +260,15 @@ export async function doctor(_args: string[] = [], cwd: string = process.cwd(), 
       bad("coding is enabled but no `github` block is configured.");
       failures++;
     } else {
-      const res = await deps.checkCodingAuth(team.github.org);
+      // Check the SAME repo-scoped token the runtime mints (exact allowlist entries),
+      // so a repo-selective App install that can't reach an allowlisted repo fails here
+      // rather than at clone/PR time. Owner-glob entries stay org-level.
+      const exactRepos = codingDeskmates
+        .flatMap(([, d]) => d.coding!.repos)
+        .filter((r) => !r.includes("*"))
+        .map((r) => r.split("/")[1])
+        .filter((n): n is string => Boolean(n));
+      const res = await deps.checkCodingAuth(team.github.org, exactRepos.length ? exactRepos : undefined);
       if (res.ok) {
         ok(`GitHub App ready — can mint an installation token for ${team.github.org}.`);
         for (const [id, d] of codingDeskmates) {
@@ -269,8 +282,11 @@ export async function doctor(_args: string[] = [], cwd: string = process.cwd(), 
             bad("GitHub channel enabled but GITHUB_WEBHOOK_SECRET is not set — webhook deliveries will fail signature checks.");
             failures++;
           }
-          if (!process.env.GITHUB_APP_SLUG) {
-            warn("GITHUB_APP_SLUG not set — the channel may not know which @mentions to answer.");
+          if (process.env.GITHUB_APP_SLUG) {
+            ok("GitHub channel: app slug set (mention dispatch).");
+          } else {
+            bad("GitHub channel enabled but GITHUB_APP_SLUG is not set — the channel will ignore all @mentions.");
+            failures++;
           }
         }
         if (codingDeskmates.length > 0) {
