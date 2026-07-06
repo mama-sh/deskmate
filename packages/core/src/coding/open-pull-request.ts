@@ -40,6 +40,8 @@ export interface SubmitDeps {
 const SAFE_FEATURE_BRANCH = /^deskmate\/[A-Za-z0-9._/-]+$/;
 // owner/name, safe chars, exactly two segments.
 const SAFE_REPO = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+// A safe git ref name (used in a shell `git diff` command — injection guard).
+const SAFE_REF = /^[A-Za-z0-9._/-]+$/;
 
 /** Extract owner/name from a github remote url (https or ssh form), else null. */
 export function parseGithubRepo(url: string): string | null {
@@ -93,6 +95,11 @@ export async function submitPullRequest(input: SubmitInput, deps: SubmitDeps): P
     );
   }
   const base = input.base ?? (await deps.getDefaultBranch(input.repo));
+  // `base` is interpolated into a shell `git diff` (readChangedFiles), so it must be a
+  // safe ref name — a model-supplied base like `main"; rm -rf ~` would otherwise inject.
+  if (!SAFE_REF.test(base)) {
+    throw new Error(`base "${base}" is not a valid branch name (letters, digits, . _ / -)`);
+  }
   if (input.branch === base) {
     throw new Error(`refusing to use the base branch "${base}" as the head — commit to a feature branch and open a PR`);
   }
@@ -175,7 +182,8 @@ export interface RepoWriteApi {
   createBlob: (content: string, encoding: "utf-8" | "base64") => Promise<string>;
   createTree: (baseTreeSha: string, entries: TreeEntry[]) => Promise<string>;
   createCommit: (message: string, treeSha: string, parents: string[]) => Promise<string>;
-  upsertBranchRef: (branch: string, sha: string) => Promise<void>;
+  /** Create the branch ref; MUST reject (not overwrite) if it already exists. */
+  createBranchRef: (branch: string, sha: string) => Promise<void>;
 }
 
 /**
@@ -200,7 +208,7 @@ export async function commitViaApi(
   }
   const treeSha = await api.createTree(baseTreeSha, entries);
   const commitSha = await api.createCommit(a.message, treeSha, [baseSha]);
-  await api.upsertBranchRef(a.branch, commitSha);
+  await api.createBranchRef(a.branch, commitSha);
 }
 
 function makeRepoWriteApi(octo: Octokit, owner: string, repo: string): RepoWriteApi {
@@ -212,12 +220,19 @@ function makeRepoWriteApi(octo: Octokit, owner: string, repo: string): RepoWrite
     createTree: async (baseTree, entries) => (await octo.rest.git.createTree({ owner, repo, base_tree: baseTree, tree: entries as any })).data.sha,
     createCommit: async (message, tree, parents) =>
       (await octo.rest.git.createCommit({ owner, repo, message, tree, parents })).data.sha,
-    upsertBranchRef: async (branch, sha) => {
+    createBranchRef: async (branch, sha) => {
       try {
         await octo.rest.git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha });
-      } catch {
-        // branch already exists — move it to the new commit
-        await octo.rest.git.updateRef({ owner, repo, ref: `heads/${branch}`, sha, force: true });
+      } catch (err) {
+        // Never force-overwrite an existing branch (would silently clobber prior work,
+        // including a human's commits). Fail clearly and let the deskmate use a new slug.
+        if ((err as { status?: number }).status === 422) {
+          throw new Error(
+            `branch "${branch}" already exists on ${owner}/${repo} — use a new deskmate/<id>/<slug> ` +
+              `(never overwriting an existing branch).`,
+          );
+        }
+        throw err;
       }
     },
   };

@@ -79,6 +79,12 @@ describe("submitPullRequest guards", () => {
     expect(deps.openPr).not.toHaveBeenCalled();
   });
 
+  it("refuses a base branch with shell metacharacters (diff-command injection guard)", async () => {
+    const deps = okDeps();
+    await expect(submitPullRequest({ ...base, base: 'main"; rm -rf ~' }, deps)).rejects.toThrow(/valid branch name/i);
+    expect(deps.readChangedFiles).not.toHaveBeenCalled();
+  });
+
   it("refuses when the sandbox has a DIFFERENT repo checked out than the approved one", async () => {
     const deps = okDeps();
     deps.getOriginRepo.mockResolvedValueOnce("acme/other");
@@ -154,7 +160,7 @@ describe("commitViaApi", () => {
       createBlob: vi.fn(async (c: string) => `blob-${c}`),
       createTree: vi.fn().mockResolvedValue("newtree"),
       createCommit: vi.fn().mockResolvedValue("newcommit"),
-      upsertBranchRef: vi.fn().mockResolvedValue(undefined),
+      createBranchRef: vi.fn().mockResolvedValue(undefined),
     };
     await commitViaApi(api, {
       base: "main",
@@ -176,7 +182,7 @@ describe("commitViaApi", () => {
       ]),
     );
     expect(api.createCommit).toHaveBeenCalledWith("msg", "newtree", ["basesha"]);
-    expect(api.upsertBranchRef).toHaveBeenCalledWith("deskmate/e/x", "newcommit");
+    expect(api.createBranchRef).toHaveBeenCalledWith("deskmate/e/x", "newcommit");
   });
 });
 
