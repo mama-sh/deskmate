@@ -56,7 +56,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node -e \"const fs=require('node:fs'); for (const f of ['front-desk-instructions.md','house-style.md']) fs.copyFileSync('src/'+f,'dist/'+f)\"",
+    "build": "tsc -p tsconfig.build.json && node -e \"const fs=require('node:fs'); for (const f of ['front-desk-instructions.md','house-style.md']) fs.copyFileSync('src/'+f,'dist/'+f); fs.copyFileSync('src/coding/instructions.md','dist/coding/instructions.md')\"",
     "prepack": "pnpm -w run build:packages",
     "typecheck": "tsc",
     "test": "vitest run --passWithNoTests"

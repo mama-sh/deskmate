@@ -12,3 +12,4 @@ export {
   type SubmitDeps,
   type OpenPullRequestToolOptions,
 } from "./open-pull-request.js";
+export { createCodingInstructions } from "./instructions.js";
