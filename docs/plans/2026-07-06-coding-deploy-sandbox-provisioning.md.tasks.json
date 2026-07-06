@@ -1,0 +1,9 @@
+{
+  "planPath": "docs/plans/2026-07-06-coding-deploy-sandbox-provisioning.md",
+  "tasks": [
+    { "id": 1, "subject": "Task 1: deploy() provisioning phase", "status": "completed" },
+    { "id": 2, "subject": "Task 2: post-deploy GitHub-App reminder", "status": "completed", "blockedBy": [1] },
+    { "id": 3, "subject": "Task 3: file the eve trace-gap issue", "status": "completed", "note": "filed vercel/eve#556" }
+  ],
+  "lastUpdated": "2026-07-06T15:00:00Z"
+}
