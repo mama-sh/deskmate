@@ -152,12 +152,15 @@ export function defineTeam(input: unknown): TeamConfig {
     for (const r of d.coding.repos) {
       const parts = r.split("/");
       const [owner, name] = parts;
-      // Exactly two segments — reject extra path segments like "acme/api/extra" that
-      // would otherwise pass (and later silently collapse to "acme/api").
-      if (parts.length !== 2 || owner !== team.github.org || !name) {
+      // Exactly two segments; the name must be a plain repo name OR exactly "*".
+      // A partial glob like "api-*" is rejected — it isn't a real repo, and it would
+      // otherwise make the sandbox read-token fall back to org-wide (the "*" branch in
+      // sandboxRepoScope), silently broadening clone access beyond the allowlist.
+      const nameOk = name === "*" || /^[A-Za-z0-9._-]+$/.test(name ?? "");
+      if (parts.length !== 2 || owner !== team.github.org || !nameOk) {
         throw new Error(
           `deskmate "${id}" coding.repos entry "${r}" must be within the single configured ` +
-            `github.org "${team.github.org}" as "owner/name" (e.g. "${team.github.org}/*").`,
+            `github.org "${team.github.org}" as "owner/name" or "owner/*" (e.g. "${team.github.org}/api").`,
         );
       }
     }

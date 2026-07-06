@@ -6,11 +6,12 @@ import { getInstallationToken, readGithubAppEnv } from "./github-app.js";
 
 export interface SubmitInput {
   repo: string; // "owner/name"
-  branch: string; // deskmate/<id>/<slug>
+  branch: string; // deskmate/<deskmateId>/<slug>
   base?: string; // base branch; defaults to the repo's default branch
   title: string;
   body: string;
   commitMessage: string;
+  deskmateId: string; // set from the tool binding, NOT model input — namespaces the branch
   allowlist: string[]; // owner/name globs the deskmate may touch
 }
 
@@ -69,6 +70,11 @@ function repoAllowed(repo: string, allowlist: string[]): boolean {
 export async function submitPullRequest(input: SubmitInput, deps: SubmitDeps): Promise<{ url: string }> {
   if (!SAFE_FEATURE_BRANCH.test(input.branch)) {
     throw new Error(`branch "${input.branch}" must be a deskmate/<id>/<slug> feature branch (letters, digits, . _ / -)`);
+  }
+  // Confine each deskmate to its OWN namespace, so deskmates sharing a repo can't
+  // push (and force-update) each other's branches.
+  if (!input.branch.startsWith(`deskmate/${input.deskmateId}/`)) {
+    throw new Error(`branch "${input.branch}" must be in this deskmate's namespace: deskmate/${input.deskmateId}/<slug>`);
   }
   if (!SAFE_REPO.test(input.repo)) {
     throw new Error(`repo "${input.repo}" must be a plain "owner/name" (letters, digits, . _ -)`);
@@ -290,7 +296,7 @@ export function createOpenPullRequestTool(opts: OpenPullRequestToolOptions) {
           return { url: data.html_url };
         },
       };
-      return submitPullRequest({ ...input, allowlist }, deps);
+      return submitPullRequest({ ...input, deskmateId: opts.deskmateId, allowlist }, deps);
     },
   });
 }

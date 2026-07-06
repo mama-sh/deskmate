@@ -196,6 +196,12 @@ describe("coding config", () => {
     ).toThrow(/owner\/name|org "acme"/i);
   });
 
+  it("rejects a partial-wildcard repo name (only owner/name or owner/* allowed)", () => {
+    expect(() =>
+      defineTeam({ github: { org: "acme" }, deskmates: { engineer: { ...eng, coding: { repos: ["acme/api-*"] } } } }),
+    ).toThrow(/owner\/name|owner\/\*/i);
+  });
+
   it("treats coding:false as off (undefined)", () => {
     const t = defineTeam({ github: { org: "acme" }, deskmates: { engineer: { ...eng, coding: false } } });
     expect(t.deskmates.engineer.coding).toBeUndefined();

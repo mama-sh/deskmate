@@ -14,6 +14,7 @@ const base = {
   title: "Fix typo",
   body: "why + how tested",
   commitMessage: "fix: typo",
+  deskmateId: "engineer",
   allowlist: ["acme/*"],
 };
 
@@ -56,11 +57,17 @@ describe("submitPullRequest guards", () => {
     expect(deps.pushCommit).not.toHaveBeenCalled();
   });
 
+  it("refuses a branch outside this deskmate's namespace", async () => {
+    const deps = okDeps();
+    await expect(submitPullRequest({ ...base, branch: "deskmate/other/foo" }, deps)).rejects.toThrow(/namespace/i);
+    expect(deps.getOriginRepo).not.toHaveBeenCalled();
+  });
+
   it("refuses to use the base branch as the head", async () => {
     const deps = okDeps();
-    await expect(submitPullRequest({ ...base, branch: "deskmate/x/y", base: "deskmate/x/y" }, deps)).rejects.toThrow(
-      /base branch/i,
-    );
+    await expect(
+      submitPullRequest({ ...base, branch: "deskmate/engineer/y", base: "deskmate/engineer/y" }, deps),
+    ).rejects.toThrow(/base branch/i);
     expect(deps.pushCommit).not.toHaveBeenCalled();
   });
 
