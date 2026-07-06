@@ -12,7 +12,7 @@
     { "id": 8, "subject": "Task 8: engineer catalog role", "status": "completed", "blockedBy": [0] },
     { "id": 9, "subject": "Task 9: doctor coding-readiness check", "status": "completed", "note": "done after merging origin/main (doctor PR #21) into the branch", "blockedBy": [0, 1] },
     { "id": 10, "subject": "Task 10: README docs", "status": "completed", "blockedBy": [6, 8] },
-    { "id": 11, "subject": "Task 11 (Phase 2): GitHub channel", "status": "pending", "blockedBy": [0, 6] }
+    { "id": 11, "subject": "Task 11 (Phase 2): GitHub channel", "status": "completed", "blockedBy": [0, 6] }
   ],
   "lastUpdated": "2026-07-06T00:00:00Z"
 }
