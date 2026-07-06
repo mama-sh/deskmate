@@ -401,12 +401,15 @@ vercel env add GITHUB_APP_PRIVATE_KEY production --value "$(awk 'BEGIN{ORS="\\n"
 vercel env add GITHUB_APP_ORG production --value your-org
 ```
 
-The App's **installation token is brokered at the sandbox firewall** — it's injected onto
-git's outbound requests but never enters the sandbox process, the conversation, or the
-model's context. The push + PR is a single **`approval: always()`** step, so a human
-approves in Slack before anything leaves the sandbox. The tool also verifies the sandbox's
-`origin` is the approved repo, refuses any branch outside `deskmate/<id>/<slug>`, and stays
-within your `coding.repos` allowlist.
+The sandbox only ever holds a **read-only clone token** — brokered onto git's outbound
+requests at the firewall, never in the sandbox process, the conversation, or the model's
+context. Making a change is a single **`approval: always()`** step: once you approve in
+Slack, the **runtime** (not the sandbox) reads your committed diff and creates the branch +
+commit + PR through the GitHub API with a short-lived **write token scoped to that one
+repo**. The write credential never enters the sandbox — so even a prompt-injected model
+can't push outside the approved path (control-plane / execution-plane separation). The tool
+refuses any branch outside `deskmate/<id>/<slug>`, stays within your `coding.repos`
+allowlist, and never merges.
 
 Two things to know:
 

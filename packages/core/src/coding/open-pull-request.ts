@@ -7,30 +7,35 @@ import { getInstallationToken, readGithubAppEnv } from "./github-app.js";
 export interface SubmitInput {
   repo: string; // "owner/name"
   branch: string; // deskmate/<id>/<slug>
-  base: string; // base branch (repo default)
+  base?: string; // base branch; defaults to the repo's default branch
   title: string;
   body: string;
+  commitMessage: string;
   allowlist: string[]; // owner/name globs the deskmate may touch
 }
 
-export interface GitResult {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
+/** One file change to include in the API commit. `content: null` means delete. */
+export interface ChangedFile {
+  path: string;
+  content: string | null;
+  encoding: "utf-8" | "base64";
+  mode: "100644" | "100755";
 }
 
 export interface SubmitDeps {
-  /** Run a git command in the sandbox working tree; returns stdout/stderr/exitCode. */
-  runGit: (command: string) => Promise<GitResult>;
-  /** Open a PR via the GitHub API (installation-token auth), returns its url. */
+  /** The repo's default branch (used as the PR base when none is given). */
+  getDefaultBranch: (repo: string) => Promise<string>;
+  /** The net changed files on the sandbox's HEAD vs `base` (read-only). */
+  readChangedFiles: (base: string) => Promise<ChangedFile[]>;
+  /** Create the branch + commit from the changes, via the GitHub API (write token). */
+  pushCommit: (a: { repo: string; base: string; branch: string; message: string; files: ChangedFile[] }) => Promise<void>;
+  /** Open the PR (write token), returns its url. */
   openPr: (a: { repo: string; head: string; base: string; title: string; body: string }) => Promise<{ url: string }>;
 }
 
-// A pushable feature branch: the deskmate/<id>/<slug> convention, safe chars only
-// (used verbatim in a shell `git push`, so this doubles as an injection guard).
+// A pushable feature branch: the deskmate/<id>/<slug> convention, safe chars only.
 const SAFE_FEATURE_BRANCH = /^deskmate\/[A-Za-z0-9._/-]+$/;
-// owner/name, safe chars only, exactly two segments (rejects path traversal like
-// "acme/api/../evil" and any shell metacharacters, defense-in-depth).
+// owner/name, safe chars, exactly two segments.
 const SAFE_REPO = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
 /** owner/name glob match: "acme/*" (any repo in owner) or "acme/api" (exact). */
@@ -44,24 +49,16 @@ function repoAllowed(repo: string, allowlist: string[]): boolean {
   });
 }
 
-/** Extract owner/name from a github remote url (https or ssh form), else null. */
-export function parseGithubRepo(url: string): string | null {
-  const m = url.trim().match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?\/?$/i);
-  return m ? `${m[1]}/${m[2]}` : null;
-}
-
 /**
- * The single outbound, human-approved step: push an already-committed feature
- * branch and open a PR. Guards enforce the safety contract — never the default
- * branch, only a shell-safe deskmate/<id>/<slug> branch, only allowlisted repos,
- * and the push destination must be the approved repo (the sandbox `origin` is
- * verified to match `input.repo`, so the human approving the call controls where
- * the push actually lands). NEVER merges. Pure over injected `deps`.
+ * The single outbound, human-approved step. Guards enforce the safety contract
+ * (only a deskmate/<id>/<slug> branch, never the base branch, only allowlisted
+ * repos), then the change is committed to a new branch and a PR is opened —
+ * entirely via the GitHub API from the trusted runtime. The write token NEVER
+ * enters the sandbox (the sandbox holds only a read-only clone token), so a
+ * misbehaving model cannot push outside this approved path. NEVER merges. Pure
+ * over injected `deps`.
  */
 export async function submitPullRequest(input: SubmitInput, deps: SubmitDeps): Promise<{ url: string }> {
-  if (input.branch === input.base) {
-    throw new Error(`refusing to push to the base branch "${input.base}" — commit to a feature branch and open a PR`);
-  }
   if (!SAFE_FEATURE_BRANCH.test(input.branch)) {
     throw new Error(`branch "${input.branch}" must be a deskmate/<id>/<slug> feature branch (letters, digits, . _ / -)`);
   }
@@ -71,33 +68,128 @@ export async function submitPullRequest(input: SubmitInput, deps: SubmitDeps): P
   if (!repoAllowed(input.repo, input.allowlist)) {
     throw new Error(`repo "${input.repo}" is not in the coding allowlist (${input.allowlist.join(", ") || "none"})`);
   }
-  // Bind the push to the approved repo: `git push origin` lands on whatever the
-  // sandbox `origin` points at (set by the model's clone), so verify it IS the
-  // approved repo before pushing — otherwise a model could clone repo A, approve a
-  // call naming repo B, and push to A. This closes that confused-deputy gap.
-  const originRes = await deps.runGit("git remote get-url origin");
-  if (originRes.exitCode !== 0) {
-    throw new Error(`could not read the sandbox git remote 'origin' (${originRes.stderr.trim() || `exit ${originRes.exitCode}`})`);
+  const base = input.base ?? (await deps.getDefaultBranch(input.repo));
+  if (input.branch === base) {
+    throw new Error(`refusing to use the base branch "${base}" as the head — commit to a feature branch and open a PR`);
   }
-  const originRepo = parseGithubRepo(originRes.stdout);
-  if (!originRepo || originRepo.toLowerCase() !== input.repo.toLowerCase()) {
-    throw new Error(
-      `sandbox origin (${originRepo ?? (originRes.stdout.trim() || "unknown")}) does not match the approved repo ` +
-        `"${input.repo}" — refusing to push`,
-    );
+  const files = await deps.readChangedFiles(base);
+  if (files.length === 0) {
+    throw new Error("no changes to submit — commit your work on the feature branch first");
   }
-  const pushRes = await deps.runGit(`git push -u origin ${input.branch}`);
-  if (pushRes.exitCode !== 0) {
-    throw new Error(`git push failed: ${pushRes.stderr.trim() || `exit ${pushRes.exitCode}`}`);
-  }
+  await deps.pushCommit({ repo: input.repo, base, branch: input.branch, message: input.commitMessage, files });
   const pr = await deps.openPr({
     repo: input.repo,
     head: input.branch,
-    base: input.base,
+    base,
     title: input.title,
     body: input.body,
   });
   return { url: pr.url };
+}
+
+/** Minimal sandbox surface `readSandboxChanges` needs (subset of eve's SandboxSession). */
+export interface SandboxLike {
+  run: (opts: { command: string }) => Promise<{ stdout: string; exitCode: number }>;
+  readBinaryFile: (opts: { path: string }) => Promise<Uint8Array>;
+}
+
+/**
+ * Read the net changed files on the sandbox's HEAD vs `base`, WITHOUT running any
+ * write git command. Uses `git diff --name-status -z` (NUL-delimited so odd paths
+ * are safe) and reads each file's bytes via `readBinaryFile` (no shell, no path
+ * interpolation). Content is base64 (works for text + binary); mode defaults to
+ * 100644 (executable-bit preservation is a known limitation).
+ */
+export async function readSandboxChanges(sandbox: SandboxLike, base: string): Promise<ChangedFile[]> {
+  const res = await sandbox.run({ command: `git diff --name-status -z "origin/${base}...HEAD"` });
+  if (res.exitCode !== 0) {
+    throw new Error(`could not diff against origin/${base} in the sandbox (exit ${res.exitCode})`);
+  }
+  const parts = res.stdout.split("\0").filter((p) => p.length > 0);
+  const files: ChangedFile[] = [];
+  let i = 0;
+  while (i < parts.length) {
+    const status = parts[i++];
+    if (status.startsWith("R") || status.startsWith("C")) {
+      // rename/copy: <old> <new> — treat as delete-old (rename only) + add-new
+      const oldPath = parts[i++];
+      const newPath = parts[i++];
+      if (status.startsWith("R")) files.push({ path: oldPath, content: null, encoding: "utf-8", mode: "100644" });
+      files.push(await readFileEntry(sandbox, newPath));
+    } else {
+      const path = parts[i++];
+      if (status.startsWith("D")) files.push({ path, content: null, encoding: "utf-8", mode: "100644" });
+      else files.push(await readFileEntry(sandbox, path)); // A, M, T
+    }
+  }
+  return files;
+}
+
+async function readFileEntry(sandbox: SandboxLike, path: string): Promise<ChangedFile> {
+  const bytes = await sandbox.readBinaryFile({ path });
+  return { path, content: Buffer.from(bytes).toString("base64"), encoding: "base64", mode: "100644" };
+}
+
+interface TreeEntry {
+  path: string;
+  mode: "100644" | "100755";
+  type: "blob";
+  sha: string | null; // null = delete
+}
+
+/** The narrow set of GitHub write operations `commitViaApi` needs (adapts Octokit). */
+export interface RepoWriteApi {
+  getRefSha: (ref: string) => Promise<string>;
+  getCommitTreeSha: (commitSha: string) => Promise<string>;
+  createBlob: (content: string, encoding: "utf-8" | "base64") => Promise<string>;
+  createTree: (baseTreeSha: string, entries: TreeEntry[]) => Promise<string>;
+  createCommit: (message: string, treeSha: string, parents: string[]) => Promise<string>;
+  upsertBranchRef: (branch: string, sha: string) => Promise<void>;
+}
+
+/**
+ * Create a single commit containing `files` on top of `base`, and point `branch`
+ * at it — all through the GitHub Git Data API (runs in the trusted runtime with a
+ * write token). No git push, no write credential in the sandbox.
+ */
+export async function commitViaApi(
+  api: RepoWriteApi,
+  a: { base: string; branch: string; message: string; files: ChangedFile[] },
+): Promise<void> {
+  const baseSha = await api.getRefSha(`heads/${a.base}`);
+  const baseTreeSha = await api.getCommitTreeSha(baseSha);
+  const entries: TreeEntry[] = [];
+  for (const f of a.files) {
+    if (f.content === null) {
+      entries.push({ path: f.path, mode: f.mode, type: "blob", sha: null });
+    } else {
+      const sha = await api.createBlob(f.content, f.encoding);
+      entries.push({ path: f.path, mode: f.mode, type: "blob", sha });
+    }
+  }
+  const treeSha = await api.createTree(baseTreeSha, entries);
+  const commitSha = await api.createCommit(a.message, treeSha, [baseSha]);
+  await api.upsertBranchRef(a.branch, commitSha);
+}
+
+function makeRepoWriteApi(octo: Octokit, owner: string, repo: string): RepoWriteApi {
+  return {
+    getRefSha: async (ref) => (await octo.rest.git.getRef({ owner, repo, ref })).data.object.sha,
+    getCommitTreeSha: async (sha) => (await octo.rest.git.getCommit({ owner, repo, commit_sha: sha })).data.tree.sha,
+    createBlob: async (content, encoding) => (await octo.rest.git.createBlob({ owner, repo, content, encoding })).data.sha,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    createTree: async (baseTree, entries) => (await octo.rest.git.createTree({ owner, repo, base_tree: baseTree, tree: entries as any })).data.sha,
+    createCommit: async (message, tree, parents) =>
+      (await octo.rest.git.createCommit({ owner, repo, message, tree, parents })).data.sha,
+    upsertBranchRef: async (branch, sha) => {
+      try {
+        await octo.rest.git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha });
+      } catch {
+        // branch already exists — move it to the new commit
+        await octo.rest.git.updateRef({ owner, repo, ref: `heads/${branch}`, sha, force: true });
+      }
+    },
+  };
 }
 
 export interface OpenPullRequestToolOptions {
@@ -108,40 +200,62 @@ export interface OpenPullRequestToolOptions {
 
 /**
  * The approval-gated `open_pull_request` tool bound to a deskmate. `approval:
- * always()` pauses the call for human sign-off before anything leaves the sandbox
- * (the analysis/execution split). Reads/edits happen in-sandbox with no gate; only
- * this push+PR step is gated. Never merges.
+ * always()` pauses for human sign-off. The change is read from the (read-only)
+ * sandbox and committed + PR'd from the runtime with a write token scoped to the
+ * target repo — the write credential never enters the sandbox. Never merges.
  */
 export function createOpenPullRequestTool(opts: OpenPullRequestToolOptions) {
   const allowlist = opts.repos.length ? opts.repos : [`${opts.org}/*`];
   return defineTool({
     description:
-      "Push the committed deskmate/<id>/<slug> feature branch and open a pull request for " +
-      "human review. NEVER targets the default branch and NEVER merges. Requires approval " +
-      "before it runs. Commit your change on the feature branch first, then call this.",
+      "Commit the change on your deskmate/<id>/<slug> feature branch and open a pull request " +
+      "for human review. NEVER targets the default branch and NEVER merges. Requires approval. " +
+      "Commit your work on the feature branch first; this reads that diff and opens the PR.",
     inputSchema: z.object({
       repo: z.string().describe('the "owner/name" of the repo cloned into the sandbox'),
       branch: z.string().describe("the deskmate/<id>/<slug> feature branch you committed to"),
-      base: z.string().default("main").describe("the base branch to open the PR against (usually the repo default)"),
+      base: z.string().optional().describe("base branch for the PR; defaults to the repo's default branch"),
       title: z.string().describe("PR title"),
       body: z.string().describe("PR description: what changed, why, and how you verified it"),
+      commitMessage: z.string().describe("the commit message for the change"),
     }),
     approval: always(),
     async execute(input, ctx) {
-      const sandbox = await ctx.getSandbox();
+      const sandbox = (await ctx.getSandbox()) as unknown as SandboxLike;
+      const env = readGithubAppEnv();
+      let octokitP: Promise<Octokit> | null = null;
+      const octokitFor = (repoName: string) =>
+        (octokitP ??= (async () => {
+          if (!env.present) {
+            throw new Error("GitHub App not configured — set GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY.");
+          }
+          const token = await getInstallationToken({
+            appId: env.appId,
+            privateKey: env.privateKey,
+            org: opts.org,
+            permissions: { contents: "write", pull_requests: "write" },
+            repositoryNames: [repoName],
+          });
+          return new Octokit({ auth: token });
+        })());
       const deps: SubmitDeps = {
-        runGit: async (command) => {
-          const r = await sandbox.run({ command });
-          return { stdout: r.stdout ?? "", stderr: r.stderr ?? "", exitCode: r.exitCode ?? 0 };
+        getDefaultBranch: async (repo) => {
+          const [owner, name] = repo.split("/");
+          const octo = await octokitFor(name);
+          return (await octo.rest.repos.get({ owner, repo: name })).data.default_branch;
+        },
+        readChangedFiles: (base) => readSandboxChanges(sandbox, base),
+        pushCommit: async (a) => {
+          const [owner, name] = a.repo.split("/");
+          const octo = await octokitFor(name);
+          await commitViaApi(makeRepoWriteApi(octo, owner, name), a);
         },
         openPr: async (a) => {
-          const env = readGithubAppEnv();
-          const token = await getInstallationToken({ appId: env.appId, privateKey: env.privateKey, org: opts.org });
-          const octokit = new Octokit({ auth: token });
-          const [owner, repo] = a.repo.split("/");
-          const { data } = await octokit.rest.pulls.create({
+          const [owner, name] = a.repo.split("/");
+          const octo = await octokitFor(name);
+          const { data } = await octo.rest.pulls.create({
             owner,
-            repo,
+            repo: name,
             head: a.head,
             base: a.base,
             title: a.title,

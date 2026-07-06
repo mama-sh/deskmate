@@ -7,6 +7,18 @@ export interface GithubAppConfig {
   org: string;
 }
 
+/**
+ * Least-privilege scoping for a minted installation token. `permissions` down-scopes
+ * to specific permissions (e.g. `{ contents: "read" }` for the sandbox clone token vs
+ * `{ contents: "write", pull_requests: "write" }` for the runtime push token);
+ * `repositoryNames` restricts the token to specific repos. Omit both for a token with
+ * the App installation's full permissions.
+ */
+export interface InstallTokenScope {
+  permissions?: Record<string, "read" | "write">;
+  repositoryNames?: string[];
+}
+
 export interface GithubAppDeps {
   createAppAuth: typeof createAppAuth;
   /** Resolve the app's installation id for the org (an app/JWT-authed request). */
@@ -30,12 +42,17 @@ const defaultDeps: GithubAppDeps = {
  * step. Injected `deps` keep this unit-testable without touching the network.
  */
 export async function getInstallationToken(
-  cfg: GithubAppConfig,
+  cfg: GithubAppConfig & InstallTokenScope,
   deps: GithubAppDeps = defaultDeps,
 ): Promise<string> {
   const { installationId } = await deps.listInstallationForOrg(cfg);
   const auth = deps.createAppAuth({ appId: cfg.appId, privateKey: cfg.privateKey });
-  const result = await auth({ type: "installation", installationId });
+  const result = await auth({
+    type: "installation",
+    installationId,
+    permissions: cfg.permissions,
+    repositoryNames: cfg.repositoryNames,
+  });
   return result.token;
 }
 

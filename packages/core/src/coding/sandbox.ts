@@ -39,7 +39,16 @@ export function createCodingSandbox(opts: CodingSandboxOptions) {
       // No App creds (local dev): don't mint — there's nothing to broker, and
       // calling GitHub with empty creds would throw and crash onSession.
       if (!env.present) return null;
-      return getInstallationToken({ appId: env.appId, privateKey: env.privateKey, org: opts.org });
+      // READ-ONLY token: the sandbox is the untrusted execution plane, so it only
+      // gets clone/fetch access. Writes never happen here — the approval-gated
+      // open_pull_request tool creates the commit + PR from the trusted runtime with
+      // a separate write token (control-plane / execution-plane separation).
+      return getInstallationToken({
+        appId: env.appId,
+        privateKey: env.privateKey,
+        org: opts.org,
+        permissions: { contents: "read", metadata: "read" },
+      });
     });
 
   return defineSandbox({

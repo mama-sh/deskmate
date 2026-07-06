@@ -17,6 +17,19 @@ describe("getInstallationToken", () => {
     expect(createAppAuth).toHaveBeenCalledWith({ appId: "1", privateKey: "pk" });
     expect(authFn).toHaveBeenCalledWith(expect.objectContaining({ type: "installation", installationId: 42 }));
   });
+
+  it("passes down-scoped permissions + repositoryNames through to the installation auth", async () => {
+    const authFn = vi.fn().mockResolvedValue({ token: "t" });
+    const createAppAuth = vi.fn().mockReturnValue(authFn);
+    const listInstallationForOrg = vi.fn().mockResolvedValue({ installationId: 7 });
+    await getInstallationToken(
+      { appId: "1", privateKey: "pk", org: "acme", permissions: { contents: "read" }, repositoryNames: ["api"] },
+      { createAppAuth: createAppAuth as never, listInstallationForOrg },
+    );
+    expect(authFn).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "installation", permissions: { contents: "read" }, repositoryNames: ["api"] }),
+    );
+  });
 });
 
 describe("readGithubAppEnv", () => {
