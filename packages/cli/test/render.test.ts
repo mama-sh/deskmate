@@ -376,4 +376,29 @@ describe("coding renderers", () => {
     expect(i).toContain("defineInstructions");
     expect(i).toContain("createCodingInstructions");
   });
+
+  it("includes GITHUB_APP_* in .env.example only when a deskmate has coding", () => {
+    const withCoding = {
+      ...fixtureTeam,
+      github: { org: "acme" },
+      deskmates: {
+        eng: {
+          role: "engineer",
+          emoji: ":technologist:",
+          displayName: "Software Engineer",
+          summary: "s",
+          reads: [],
+          coding: { repos: ["acme/*"] },
+        },
+      },
+    } as unknown as TeamConfig;
+    const s = renderEnvExample(withCoding);
+    expect(s).toContain("GITHUB_APP_ID");
+    expect(s).toContain("GITHUB_APP_PRIVATE_KEY");
+    expect(s).toContain("GITHUB_APP_ORG=acme");
+    expect(s).toContain("GITHUB_WEBHOOK_SECRET");
+    expect(s).toContain("GITHUB_TOKEN"); // commented local-only fallback
+
+    expect(renderEnvExample(fixtureTeam)).not.toContain("GITHUB_APP_ID");
+  });
 });

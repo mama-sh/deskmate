@@ -391,5 +391,22 @@ ${oauth.join("\n")}`
 # DATABASE_URL=postgres://...`
     : "";
 
-  return `${preamble}${body}${memory}${oauthBlock}\n`;
+  // Only surface the GitHub App vars when ≥1 deskmate opts into coding. The App
+  // brokers a short-lived install token for git; requires the Vercel backend to push.
+  const anyCoding = Object.values(team.deskmates).some((d) => d.coding);
+  const coding = anyCoding
+    ? `\n\n# ── Coding deskmates (GitHub App) ─────────────────────────────────────────
+# A coding deskmate clones/pushes via a GitHub App installed on org "${team.github?.org ?? "<org>"}".
+# Create + install the App (grant contents:write + pull_requests:write), then set:
+GITHUB_APP_ID=
+# The PEM private key on one line — escape newlines as \\n (use \`vercel env add --value\`):
+GITHUB_APP_PRIVATE_KEY=
+GITHUB_APP_ORG=${team.github?.org ?? ""}
+# Only for the Phase-2 GitHub channel (@mentions on issues/PRs):
+GITHUB_WEBHOOK_SECRET=
+# Local-only read/explore fallback (Docker can't broker the App token). NOT for production:
+# GITHUB_TOKEN=`
+    : "";
+
+  return `${preamble}${body}${memory}${coding}${oauthBlock}\n`;
 }
