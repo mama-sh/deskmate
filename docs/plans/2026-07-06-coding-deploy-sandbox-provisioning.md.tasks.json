@@ -1,0 +1,9 @@
+{
+  "planPath": "docs/plans/2026-07-06-coding-deploy-sandbox-provisioning.md",
+  "tasks": [
+    { "id": 1, "subject": "Task 1: deploy() provisioning phase", "status": "pending" },
+    { "id": 2, "subject": "Task 2: post-deploy GitHub-App reminder", "status": "pending", "blockedBy": [1] },
+    { "id": 3, "subject": "Task 3: file the eve trace-gap issue", "status": "pending" }
+  ],
+  "lastUpdated": "2026-07-06T14:30:00Z"
+}
