@@ -18,6 +18,10 @@ describe("isBareAck", () => {
       expect(isBareAck(t), t).toBe(true);
     }
   });
+  it("treats a bare +1 as an ack (both the literal and the :+1: shortcode)", () => {
+    expect(isBareAck("+1")).toBe(true);
+    expect(isBareAck(":+1:")).toBe(true);
+  });
   it("treats an empty / whitespace message as an ack (nothing to answer)", () => {
     expect(isBareAck("   ")).toBe(true);
   });

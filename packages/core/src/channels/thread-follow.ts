@@ -32,8 +32,8 @@ export function isBareAck(text: string): boolean {
   // Strip emoji / non-letter-number characters to catch ":thumbsup:", "👍", "thanks!!!".
   const norm = text
     .toLowerCase()
-    .replace(/:[a-z0-9_+-]+:/g, " ") // slack :emoji: shortcodes
-    .replace(/[^\p{L}\p{N}'\s]/gu, " ") // punctuation + unicode emoji
+    .replace(/:[a-z0-9_+-]+:/g, " ") // slack :emoji: shortcodes (e.g. :+1:)
+    .replace(/[^\p{L}\p{N}'+\s]/gu, " ") // punctuation + unicode emoji; keep '+' so "+1" survives
     .replace(/\s+/g, " ")
     .trim();
   if (!norm) return true; // empty or emoji-only → nothing to answer
