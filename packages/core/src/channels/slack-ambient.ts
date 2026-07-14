@@ -4,15 +4,25 @@ import { createSlackChannel } from "./slack.js";
 import { resolveRoute, resolveWatch, watchDisabled, type ChannelRoute } from "../channel-routes.js";
 import { classifyEvent } from "../watch-gate.js";
 import { withinCooldown } from "./watch-cooldown.js";
+import { shouldFollowThread } from "./thread-follow.js";
 import type { Roster } from "../roster.js";
 
-// ── Proactive channel watching ─────────────────────────────────────────────────
-// Watch ALL messages in opted-in channels (no @mention required) and pick a single
-// action per message via the attention gate (watch-gate.ts): ignore / react inline /
-// reply in-thread / post top-level. Opt-in is per channel via `routes[id].watch`
-// (see channel-routes.ts); a channel without a `watch` block is never watched.
-// This complements the mention/DM managed channel (slack.ts), which still owns
-// @mentions — a watched message that @mentions the bot is left for that path.
+// This channel receives every `message.channels` event and serves two distinct
+// no-@mention concerns, in order:
+//
+// 1. Thread participation (always-on, see thread-follow.ts). A reply in a thread
+//    the bot already posted in is a direct continuation of that conversation, so
+//    it's dispatched back into the thread regardless of watch settings — "talk to
+//    the bot in-thread without tagging it again." This is NOT gated by watch opt-in.
+//
+// 2. Proactive channel watching (opt-in, see watch-gate.ts). For everything else,
+//    watch ALL messages in opted-in channels and pick a single action via the
+//    attention gate: ignore / react inline / reply in-thread / post top-level.
+//    Opt-in is per channel via `routes[id].watch` (channel-routes.ts); a channel
+//    without a `watch` block is never watched.
+//
+// Both complement the mention/DM managed channel (slack.ts), which owns @mentions —
+// a message that @mentions the bot is always left for that path.
 //
 // Roster-parameterized: `createSlackAmbientChannel(roster, routes, conveneMaxTurns)`
 // builds the managed Slack channel from the same roster and dispatches qualifying
@@ -197,17 +207,54 @@ export function createSlackAmbientChannel(
       args.waitUntil(
         (async () => {
           try {
-            if (watchDisabled()) return log("skip: DESKMATE_WATCH_DISABLED");
-            const route = resolveRoute({ id: channelId }, routes);
-            const watch = resolveWatch(route ? routes[channelId] : null);
-            if (!route || !watch) return log("skip: channel not opted into watch");
-
             const botUserId = await getBotUserId();
             if (!botUserId) return log("skip: no botUserId");
             if (userId === botUserId) return log("skip: bot's own message");
             if (text.includes(`<@${botUserId}>`)) return log("skip: @mention → managed channel handles it");
 
-            const { recent, messages } = await threadContext(channelId, rootTs, botUserId);
+            // Fetch the thread at most once; the thread-follow check and the watcher
+            // both read it (conversations.replies is the priciest call on this path).
+            let ctx: { recent: string; messages: any[] } | null = null;
+            const threadCtx = async () => (ctx ??= await threadContext(channelId, rootTs, botUserId));
+
+            // ── Thread participation (always-on, no watch opt-in) ────────────────
+            // A no-mention reply in a thread the bot already joined is a direct
+            // continuation of that conversation, not proactive channel-watching:
+            // dispatch it straight back into the thread, regardless of watch
+            // settings and without the proactive reply cooldown. `args.receive` with
+            // this threadTs resumes the same session the original @mention started.
+            const isThreadReply = !!event.thread_ts && event.thread_ts !== event.ts;
+            if (isThreadReply) {
+              const { messages } = await threadCtx();
+              const decision = shouldFollowThread({ event, botUserId, threadMessages: messages });
+              if (decision.follow) {
+                await args.receive(slack, {
+                  message: text,
+                  target: { channelId, threadTs: rootTs },
+                  auth: {
+                    authenticator: "slack",
+                    issuer: "slack",
+                    principalType: "user",
+                    principalId: userId,
+                    subject: userId,
+                    attributes: { teamId: envelope?.team_id ?? null, channelId },
+                  },
+                });
+                return log(`dispatched thread-follow reply (${decision.reason})`);
+              }
+              log(`thread-follow skip: ${decision.reason}`);
+              // fall through to the two-tier watcher below
+            }
+
+            // ── Two-tier watcher (opt-in per channel) ────────────────────────────
+            // DESKMATE_WATCH_DISABLED kills only proactive watching, not the
+            // direct-address thread participation above (that's like an @mention).
+            if (watchDisabled()) return log("skip: DESKMATE_WATCH_DISABLED");
+            const route = resolveRoute({ id: channelId }, routes);
+            const watch = resolveWatch(route ? routes[channelId] : null);
+            if (!route || !watch) return log("skip: channel not opted into watch");
+
+            const { recent, messages } = await threadCtx();
 
             const verdict = await classifyEvent({
               text,
