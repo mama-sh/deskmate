@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/mama-sh/deskmate/compare/core-v0.3.0...core-v0.3.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* **core:** follow up in Slack threads the bot joined without a re-[@mention](https://github.com/mention) ([#26](https://github.com/mama-sh/deskmate/issues/26)) ([5ec4c62](https://github.com/mama-sh/deskmate/commit/5ec4c62f613ba9ab777db0671a110bc1fd7bd5be))
+
 ## [0.3.0](https://github.com/mama-sh/deskmate/compare/core-v0.2.0...core-v0.3.0) (2026-07-06)
 
 
