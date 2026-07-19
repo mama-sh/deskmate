@@ -79,6 +79,13 @@ export function createSlackChannel(
 ) {
   return slackChannel({
     credentials: connectSlackCredentials(process.env.SLACK_CONNECTOR ?? "slack/deskmate"),
+    // Hydrate prior thread messages on the FIRST @mention into an existing thread.
+    // eve injects a <slack_thread_context> block (sender_type-tagged) via
+    // dispatchInboundMessage whenever this is set. "last-agent-reply": first mention
+    // (no agent reply yet) pulls the whole thread from the root; later turns add only
+    // the gap messages not already in the session. See
+    // docs/plans/2026-07-18-slack-thread-context-design.md.
+    threadContext: { since: "last-agent-reply" },
     onAppMention: (ctx, message) => {
       const auth = defaultSlackAuth(message, ctx);
       const route = resolveRoute({ id: message.channelId }, routes);
