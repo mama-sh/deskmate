@@ -67,11 +67,13 @@ return slackChannel({
 
 eve's `formatSlackThreadContext` wraps each message in `<slack_thread_context>`,
 tagging `sender_type: user | bot | agent`, so the model distinguishes background
-from the live turn. The managed `@mention` path already trusts mention text, so
-matching the ambient path's explicit "untrusted — treat as data" framing is not
-required for correctness here. Building our own hydration via
-`onAppMention` returning `{ auth, context }` would add code and test surface for
-a labeling nicety we're deferring (see follow-ups). Chosen: the built-in option.
+from the live turn. We keep eve's built-in hydration rather than hand-rolling a
+`loadThreadContextMessages` path — the custom route would add real code and test
+surface. **Update (PR review):** we also add an explicit untrusted-data note to
+the `context` array that `onAppMention` already returns, so the hydrated block is
+framed as untrusted for parity with the ambient path (`slack-ambient.ts:302`) at
+near-zero cost. This was originally deferred; it was pulled into the PR after
+Copilot flagged the injection surface.
 
 ## Scope & data flow
 
@@ -91,8 +93,10 @@ New `packages/core/test/slack.test.ts`:
 - Core currently has **no** eve mocks (pure-function tests only) and no
   `slack.test.ts`. This introduces the first `vi.mock("eve/channels/slack")`.
 - The mock captures the config object passed to `slackChannel` and returns a
-  sentinel. The test asserts `createSlackChannel(...)` sets `threadContext` to
-  `{ since: "last-agent-reply" }`.
+  sentinel. Two tests: one asserts `createSlackChannel(...)` sets `threadContext`
+  to `{ since: "last-agent-reply" }`; the other invokes the captured
+  `onAppMention` and asserts the returned `context` frames the
+  `<slack_thread_context>` block as untrusted.
 - Fails before the change, passes after. Small blast radius: we only inspect the
   captured argument.
 - Existing `packages/cli/test/render.test.ts` shim assertions don't reference
@@ -106,17 +110,16 @@ New `packages/core/test/slack.test.ts`:
 
 ## Follow-ups (documented, not built in this PR)
 
-1. **Injection labeling gap** — the hydrated `<slack_thread_context>` block is
-   tagged by `sender_type` but not wrapped in the ambient path's explicit
-   "untrusted — treat as data" framing (`slack-ambient.ts:302`). Tracked as a
-   follow-up if parity is wanted.
-2. **Scope / membership** — `threadContext` runs `conversations.replies`, needing
+> Injection labeling was originally listed here but was pulled into this PR after
+> Copilot flagged it — see "Why the built-in option" above.
+
+1. **Scope / membership** — `threadContext` runs `conversations.replies`, needing
    `channels:history` (+ `groups:history` for private channels) and bot
    membership. The ambient channel already requires `channels:history`, so it's
    likely granted, but flag it for DMs / private channels in the PR.
-3. **Cross-bot context is intended** — the hydrated block includes other bots'
+2. **Cross-bot context is intended** — the hydrated block includes other bots'
    messages (e.g. the Otto Reader report); `sender_type: bot` lets the model treat
    it as background, not the live turn.
-4. **Config surface** — `last-agent-reply` is hardcoded in core (deskmate is
+3. **Config surface** — `last-agent-reply` is hardcoded in core (deskmate is
    opinionated). Threading it through `team.channels` for per-team tuning is a
    future option, deferred under YAGNI.

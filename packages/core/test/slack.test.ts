@@ -21,17 +21,37 @@ import type { Roster } from "../src/roster.js";
 
 const roster = {} as Roster;
 
+// Clear ALL mocks (not just slackChannelMock) so call history from connectCredsMock
+// or defaultSlackAuth can't leak between tests; clear preserves the vi.fn(impl).
 beforeEach(() => {
-  slackChannelMock.mockClear();
+  vi.clearAllMocks();
 });
+
+type SlackConfig = {
+  threadContext?: unknown;
+  onAppMention: (ctx: unknown, message: { channelId?: string }) => { auth: unknown; context?: string[] };
+};
+
+const capturedConfig = (): SlackConfig => slackChannelMock.mock.calls[0]![0] as SlackConfig;
 
 describe("createSlackChannel", () => {
   it("opts into thread-context hydration since the last agent reply", () => {
     createSlackChannel(roster);
 
     expect(slackChannelMock).toHaveBeenCalledTimes(1);
-    const config = slackChannelMock.mock.calls[0]![0] as { threadContext?: unknown };
     // The whole bug is that this option was never set — assert the exact boundary.
-    expect(config.threadContext).toEqual({ since: "last-agent-reply" });
+    expect(capturedConfig().threadContext).toEqual({ since: "last-agent-reply" });
+  });
+
+  it("frames the hydrated thread context as untrusted data on @mention", () => {
+    createSlackChannel(roster);
+
+    // No route configured (roster only, empty routes) → onAppMention returns just the
+    // untrusted-framing note. It must name the <slack_thread_context> block eve injects.
+    const result = capturedConfig().onAppMention({}, { channelId: "C_UNROUTED" });
+    expect(result.context).toBeDefined();
+    expect(
+      result.context!.some((c) => /untrusted/i.test(c) && c.includes("<slack_thread_context>")),
+    ).toBe(true);
   });
 });

@@ -150,6 +150,9 @@ If desired, `deskmate dev` against a real workspace: @mention the bot as a fresh
 
 ## Follow-ups (out of scope — tracked, not built)
 
-1. Injection labeling parity: the `<slack_thread_context>` block is `sender_type`-tagged but not wrapped in the ambient path's explicit "untrusted — treat as data" framing (`slack-ambient.ts:302`).
-2. Scope/membership: `threadContext` needs `channels:history` (+ `groups:history` for private) and bot membership; note it in the PR for DMs / private channels.
-3. Per-team config surface for the `since` boundary (currently hardcoded in core).
+> Injection labeling parity was originally deferred here but was implemented in
+> this PR after Copilot flagged the injection surface: `onAppMention` now returns
+> an untrusted-data note framing the `<slack_thread_context>` block.
+
+1. Scope/membership: `threadContext` needs `channels:history` (+ `groups:history` for private) and bot membership; note it in the PR for DMs / private channels.
+2. Per-team config surface for the `since` boundary (currently hardcoded in core).
