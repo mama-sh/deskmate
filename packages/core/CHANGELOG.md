@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/mama-sh/deskmate/compare/core-v0.3.1...core-v0.3.2) (2026-07-19)
+
+
+### Bug Fixes
+
+* **core:** hydrate Slack thread context on first [@mention](https://github.com/mention) into an existing thread ([#28](https://github.com/mama-sh/deskmate/issues/28)) ([4845e61](https://github.com/mama-sh/deskmate/commit/4845e6125ae2487306b5c3f16240946f31530fe1))
+
 ## [0.3.1](https://github.com/mama-sh/deskmate/compare/core-v0.3.0...core-v0.3.1) (2026-07-14)
 
 
