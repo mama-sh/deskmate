@@ -4,7 +4,7 @@ import { createInterface } from "node:readline/promises";
 import { renderMcpConnection, renderConnectConnection } from "./lib/mcp-template.js";
 import { appendConnectionEntry, renderEntry } from "./config-file.js";
 import { CONFIG_FILE, editConfig } from "./add.js";
-import { isValidId } from "./lib/ids.js";
+import { isValidConnectionName, connectionNameError } from "./lib/ids.js";
 
 /**
  * Run `fn` with an `ask(question, fallback)` helper. Buffers stdin lines so it
@@ -140,8 +140,12 @@ export function scaffoldTokenConnection(
 export async function mcpAdd(args: string[], cwd: string = process.cwd()): Promise<void> {
   const name = args[0];
   if (!name) throw new Error("usage: deskmate mcp-add <name>");
-  if (!isValidId(name)) {
-    throw new Error("<name> must be a snake_case identifier (lowercase letter, then letters/digits/underscores).");
+  // Connection names must satisfy BOTH deskmate's snake_case rule AND eve's kebab-case
+  // connection-filename rule — i.e. a single lowercase word (no dashes, no underscores).
+  // Reject anything else here with a message that names the eve conflict, so a name like
+  // `github-write`/`github_write` fails at add time instead of silently at `eve build`.
+  if (!isValidConnectionName(name)) {
+    throw new Error(connectionNameError(name));
   }
   const upper = name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
   await withPrompts(async (ask) => {

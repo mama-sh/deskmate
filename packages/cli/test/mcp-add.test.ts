@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scaffoldConnectConnection, scaffoldTokenConnection } from "../src/mcp-add.js";
+import { scaffoldConnectConnection, scaffoldTokenConnection, mcpAdd } from "../src/mcp-add.js";
 
 let dir: string;
 beforeEach(() => {
@@ -112,5 +112,20 @@ describe("scaffoldTokenConnection", () => {
     writeFileSync(file, "// hand-edited\n");
     scaffoldTokenConnection({ name: "acme", urlEnv: "ACME_MCP_URL", tokenEnv: "ACME_MCP_TOKEN", description: "d", tools: [] }, dir);
     expect(readFileSync(file, "utf8")).toBe("// hand-edited\n");
+  });
+});
+
+// `mcpAdd` validates the name BEFORE any interactive prompt, so these reject without
+// touching stdin. deskmate's snake_case and eve's kebab-case connection-filename rules
+// have no multi-word overlap, so both a dash- and an underscore-separated name must fail
+// fast at add time (with a message that names the eve/sync conflict) rather than at deploy.
+describe("mcpAdd — connection-name validation (eve ∩ sync intersection)", () => {
+  it("rejects a kebab-case name (dashes) with a message that names the eve build conflict", async () => {
+    await expect(mcpAdd(["github-write"], dir)).rejects.toThrow(/single lowercase word/);
+    await expect(mcpAdd(["github-write"], dir)).rejects.toThrow(/eve build/);
+  });
+
+  it("rejects a snake_case multi-word name (underscores) before it can fail at eve build", async () => {
+    await expect(mcpAdd(["github_write"], dir)).rejects.toThrow(/single lowercase word/);
   });
 });
