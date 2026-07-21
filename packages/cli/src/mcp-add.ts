@@ -87,7 +87,7 @@ export function scaffoldTokenConnection(
     tokenEnv: string;
     description: string;
     tools: string[];
-    scheme?: "bearer" | "basic" | "custom-header";
+    scheme?: "bearer" | "basic" | "custom-header" | "github-app";
     headerName?: string;
   },
   cwd: string,
@@ -163,15 +163,27 @@ export async function mcpAdd(args: string[], cwd: string = process.cwd()): Promi
     }
     // ── token path ─────────────────────────────────────────────────────────
     const urlEnv = await ask("URL env var", `${upper}_MCP_URL`);
-    const tokenEnv = await ask("Token env var", `${upper}_MCP_TOKEN`);
+    // Ask the scheme before the token env: `github-app` has no <PREFIX>_MCP_TOKEN to
+    // prompt for (it mints an installation token from GITHUB_APP_* at call time).
+    const rawScheme = (await ask("Token scheme [bearer/basic/custom-header/github-app]", "bearer")).toLowerCase();
+    const scheme =
+      rawScheme === "basic" || rawScheme === "custom-header" || rawScheme === "github-app"
+        ? rawScheme
+        : "bearer";
+    // github-app: skip the token-env prompt. The <PREFIX> is still derived from the
+    // URL env's default so the { kind:"mcp", env } config entry stays well-formed; the
+    // value never appears in the generated github-app file.
+    const tokenEnv =
+      scheme === "github-app" ? `${upper}_MCP_TOKEN` : await ask("Token env var", `${upper}_MCP_TOKEN`);
     const description = await ask("Description (for the model)", `Read-only ${name} MCP.`);
     const toolsRaw = await ask("Read tools (comma-separated)", "");
     const tools = toolsRaw.split(",").map((t) => t.trim()).filter(Boolean);
-    const rawScheme = (await ask("Token scheme [bearer/basic/custom-header]", "bearer")).toLowerCase();
-    const scheme = rawScheme === "basic" || rawScheme === "custom-header" ? rawScheme : "bearer";
     const headerName = scheme === "custom-header" ? await ask("Header name", "X-Api-Key") : undefined;
     if (scheme === "basic") {
       console.log(`  basic auth: set ${tokenEnv} to plaintext "publicKey:secretKey" (it gets base64-encoded).`);
+    }
+    if (scheme === "github-app") {
+      console.log(`  github-app auth: set GITHUB_APP_ID / GITHUB_APP_PRIVATE_KEY / GITHUB_APP_ORG (no ${tokenEnv} needed).`);
     }
     scaffoldTokenConnection({ name, urlEnv, tokenEnv, description, tools, scheme, headerName }, cwd);
   });

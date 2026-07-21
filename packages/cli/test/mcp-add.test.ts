@@ -90,6 +90,22 @@ describe("scaffoldTokenConnection", () => {
     expect(src).toContain('"X-Api-Key": process.env["DOCS_MCP_TOKEN"] || ""');
   });
 
+  it("github-app scaffold writes a core-backed getToken file (no _MCP_TOKEN) and still wires a { kind:'mcp', env } entry", () => {
+    const cfg = join(dir, "deskmate.config.ts");
+    writeFileSync(cfg, `import { defineTeam } from "@deskmate/core";\nexport default defineTeam({\n  connections: {\n  },\n  deskmates: {},\n});\n`);
+    scaffoldTokenConnection(
+      { name: "githubwrite", urlEnv: "GITHUBWRITE_MCP_URL", tokenEnv: "GITHUBWRITE_MCP_TOKEN", description: "GitHub write.", tools: ["issue_write"], scheme: "github-app" },
+      dir,
+    );
+    const src = readFileSync(join(dir, "connections", "githubwrite.ts"), "utf8");
+    expect(src).toContain('import { getInstallationToken, readGithubAppEnv } from "@deskmate/core/coding";');
+    expect(src).toContain("getInstallationToken(");
+    // App auth — never a bearer _MCP_TOKEN in the generated file.
+    expect(src).not.toContain('process.env["GITHUBWRITE_MCP_TOKEN"]');
+    // The URL still drives a { kind:"mcp", env } config entry like every other scheme.
+    expect(readFileSync(cfg, "utf8")).toContain('env: "GITHUBWRITE"');
+  });
+
   it("never clobbers an existing token connection file", () => {
     scaffoldTokenConnection({ name: "acme", urlEnv: "ACME_MCP_URL", tokenEnv: "ACME_MCP_TOKEN", description: "d", tools: [] }, dir);
     const file = join(dir, "connections", "acme.ts");
