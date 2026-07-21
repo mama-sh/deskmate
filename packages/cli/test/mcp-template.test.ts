@@ -81,6 +81,41 @@ describe("renderMcpConnection", () => {
   });
 });
 
+describe("renderMcpConnection — github-app scheme", () => {
+  it("mints an installation token via @deskmate/core/coding instead of an env _MCP_TOKEN", () => {
+    const src = renderMcpConnection({
+      name: "github_write",
+      urlEnv: "GITHUB_WRITE_MCP_URL",
+      tokenEnv: "GITHUB_WRITE_MCP_TOKEN",
+      description: "GitHub write (issues, comments).",
+      tools: ["issue_write", "add_issue_comment"],
+      scheme: "github-app",
+    });
+    // Pulls the App-auth helpers from core's public coding subpath.
+    expect(src).toContain('import { getInstallationToken, readGithubAppEnv } from "@deskmate/core/coding";');
+    // getToken brokers a fine-grained installation token from the App env.
+    expect(src).toContain("getToken:");
+    expect(src).toContain("getInstallationToken(");
+    expect(src).toContain("readGithubAppEnv()");
+    // Tool allow-list is rendered like every other scheme.
+    expect(src).toContain('tools: { allow: ["issue_write", "add_issue_comment"] }');
+    // App auth — NEVER a bearer _MCP_TOKEN.
+    expect(src).not.toContain('process.env["GITHUB_WRITE_MCP_TOKEN"]');
+    // The .env.example-style hint points at the GitHub App vars, not a _MCP_TOKEN.
+    expect(src).toContain("GITHUB_APP_ID");
+    expect(src).not.toContain("GITHUB_WRITE_MCP_TOKEN");
+  });
+
+  it("does not disturb bearer output (the default scheme stays byte-identical)", () => {
+    const src = renderMcpConnection({
+      name: "acme", urlEnv: "ACME_MCP_URL", tokenEnv: "ACME_MCP_TOKEN",
+      description: "Acme.", tools: ["search"],
+    });
+    expect(src).toContain('auth: { getToken: async () => ({ token: process.env["ACME_MCP_TOKEN"] || "" }) }');
+    expect(src).not.toContain("@deskmate/core/coding");
+  });
+});
+
 describe("renderConnectConnection", () => {
   it("renders an app-scoped Vercel Connect connection", () => {
     const out = renderConnectConnection({
