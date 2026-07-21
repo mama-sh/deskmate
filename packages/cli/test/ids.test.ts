@@ -31,6 +31,18 @@ describe("isValidConnectionName (eve ∩ deskmate intersection — single lowerc
       expect(isValidConnectionName(bad)).toBe(false);
     }
   });
+
+  it("matches eve's 64-char cap: a 64-char word is accepted, a 65-char word is rejected", () => {
+    // eve's CONNECTION_SLUG_PATTERN is /^[a-z][a-z0-9-]{0,63}$/ — a leading letter plus up
+    // to 63 more chars = 64 total. A longer single word would pass an unbounded intersection
+    // check yet still fail at `eve build`, so the guard must enforce the same cap.
+    const at64 = "a" + "b".repeat(63); // 64 chars
+    const at65 = "a" + "b".repeat(64); // 65 chars
+    expect(at64.length).toBe(64);
+    expect(at65.length).toBe(65);
+    expect(isValidConnectionName(at64)).toBe(true);
+    expect(isValidConnectionName(at65)).toBe(false);
+  });
 });
 
 describe("connectionNameError", () => {

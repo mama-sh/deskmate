@@ -23,9 +23,12 @@ export function isValidId(id: string): boolean {
 //     KEBAB-case (eve's CONNECTION_SLUG_PATTERN):
 //       /^[a-z][a-z0-9-]{0,63}$/  — dashes OK, underscores rejected.
 // No MULTI-WORD name satisfies both (snake wants `_`, kebab wants `-`), so the only
-// portable connection names are single lowercase words. We enforce that intersection
-// at `mcp-add`/`sync` time — with a message that names the conflict — so a bad name
-// fails immediately instead of silently at `eve build` (deploy). See CONNECTION_NAME_ERROR.
+// portable connection names are single lowercase words. eve also caps the name at 64
+// chars ({0,63} after the leading letter), so we match that bound too — otherwise a
+// >64-char single word would pass this guard yet still die at `eve build`, the exact
+// deploy-time failure this guard exists to prevent. We enforce the full intersection at
+// `mcp-add`/`sync` time — with a message that names the conflict — so a bad name fails
+// immediately instead of silently at `eve build` (deploy). See connectionNameError.
 //
 // FOLLOW-UP (full reconciliation, out of this CLI-only change): teach both validators
 // to accept eve-compatible kebab-case (a connection-specific rule, NOT the shared
@@ -33,11 +36,12 @@ export function isValidId(id: string): boolean {
 // generated `deskmate.config.ts` entry (config-file.ts `renderEntry`), and derive any
 // JS-identifier positions (camelCase) safely. That spans @deskmate/core's defineTeam
 // too, so it is deliberately deferred.
-export const CONNECTION_NAME_RE = /^[a-z][a-z0-9]*$/;
+export const CONNECTION_NAME_RE = /^[a-z][a-z0-9]{0,63}$/;
 
 /**
  * True when `name` is a legal connection name under BOTH deskmate's snake_case rule and
- * eve's kebab-case connection-filename rule — i.e. a single lowercase word.
+ * eve's kebab-case connection-filename rule — i.e. a single lowercase word of at most 64
+ * characters (eve caps connection names at 64).
  */
 export function isValidConnectionName(name: string): boolean {
   return CONNECTION_NAME_RE.test(name);
