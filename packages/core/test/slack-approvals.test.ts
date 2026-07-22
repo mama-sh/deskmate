@@ -226,6 +226,19 @@ describe("renderInputRequest — mrkdwn injection hardening", () => {
     // The notification/fallback text can't ping via <!channel> either.
     expect(text).not.toContain("<!channel>");
   });
+
+  it("escapes Slack control syntax in a question's notification fallback", () => {
+    const req: InputRequest = {
+      action: { callId: "c", input: {}, kind: "tool-call", toolName: "ask_question" },
+      display: "text",
+      allowFreeform: true,
+      prompt: "Notify <!channel> now?",
+      requestId: "q6",
+    };
+    const { text } = renderInputRequest(req);
+    expect(text).not.toContain("<!channel>");
+    expect(text).toContain("&lt;!channel&gt;");
+  });
 });
 
 const roster = {
@@ -278,5 +291,22 @@ describe("inputRequestedHandler", () => {
     expect(requests).toHaveLength(0);
     expect(posts).toHaveLength(1);
     expect(posts[0].blocks).toBeTruthy();
+  });
+
+  it("never attributes a question to the active deskmate (posts under the shared bot)", async () => {
+    // A front-desk ask_question could read a stale activeDeskmateId; it must not
+    // impersonate the deskmate. Anchored thread + active deskmate, yet no as-deskmate post.
+    const { channel, requests, posts } = fakeChannel({ activeDeskmateId: "omri", channelId: "C1", threadTs: "T1" });
+    const question: InputRequest = {
+      action: { callId: "c", input: {}, kind: "tool-call", toolName: "ask_question" },
+      display: "text",
+      allowFreeform: true,
+      prompt: "What should I name it?",
+      requestId: "q7",
+    };
+    await inputRequestedHandler(roster)({ requests: [question] } as any, channel, {} as any);
+    expect(requests).toHaveLength(0); // not posted via chat.postMessage as a deskmate
+    expect(posts).toHaveLength(1); // shared-bot post
+    expect(JSON.stringify(posts[0])).not.toContain("Omri"); // no deskmate name anywhere
   });
 });

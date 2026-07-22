@@ -221,7 +221,9 @@ function renderQuestion(req: InputRequest): RenderedRequest {
       ],
     });
   }
-  return { blocks, text: req.prompt };
+  // Escape the notification/accessibility fallback too — Slack processes `<!channel>`
+  // / `<@U…>` in `text`, so an un-escaped prompt could ping despite the escaped block.
+  return { blocks, text: escapeMrkdwn(req.prompt) };
 }
 
 export function renderInputRequest(req: InputRequest, deskmateName?: string): RenderedRequest {
@@ -230,9 +232,15 @@ export function renderInputRequest(req: InputRequest, deskmateName?: string): Re
 
 /**
  * `events["input.requested"]` handler: render each pending HITL request as a
- * human-readable card and post it AS the requesting deskmate when we can resolve
- * one and the thread is anchored; otherwise post under the shared bot. `blocks`
- * is identical on both paths.
+ * human-readable card and post it AS the requesting deskmate — for APPROVAL
+ * requests only — when we can resolve one and the thread is anchored; questions
+ * and everything else post under the shared bot. `blocks` is identical either way.
+ *
+ * Attribution is scoped to approvals on purpose. Approvals are subagent-proxied,
+ * so `activeDeskmateId` is the deskmate that raised them (set on this same parent
+ * turn). A built-in `ask_question` can instead come straight from the front desk,
+ * where `activeDeskmateId` may be a leftover from an earlier turn — attributing a
+ * question to it would impersonate a stale deskmate, so questions never carry it.
  *
  * Identity is resolved from `activeDeskmateId` on the channel state. Every
  * approval-gated tool is subagent-bound, and a subagent runs as a separate child
@@ -263,8 +271,11 @@ export function inputRequestedHandler(roster: Roster): NonNullable<SlackChannelE
     const { channelId, threadTs } = state;
 
     for (const req of data.requests as unknown as InputRequest[]) {
-      const { blocks, text } = renderInputRequest(req, deskmateName);
-      if (identity && channelId && threadTs) {
+      // Only approvals carry the deskmate identity (see the doc comment): a stale
+      // `activeDeskmateId` must never impersonate on a front-desk `ask_question`.
+      const name = isApproval(req) ? deskmateName : undefined;
+      const { blocks, text } = renderInputRequest(req, name);
+      if (identity && name && channelId && threadTs) {
         try {
           const res = await channel.slack.request("chat.postMessage", {
             channel: channelId,
