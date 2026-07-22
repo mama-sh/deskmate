@@ -60,3 +60,47 @@ describe("renderInputRequest — record_decision", () => {
     expect(text).toContain("Open GitHub issue: dedup gap");
   });
 });
+
+describe("renderInputRequest — forget (destructive)", () => {
+  it("uses a delete verb with an irreversibility warning and shows the key", () => {
+    const { blocks } = renderInputRequest(approvalReq("forget", { key: "pr-bot-review-triggers" }));
+    const dump = JSON.stringify(blocks);
+    expect(dump).toContain("Delete a memory");
+    expect(dump).toMatch(/can.?t be undone/i);
+    expect(dump).toContain("pr-bot-review-triggers");
+  });
+});
+
+describe("renderInputRequest — open_pull_request", () => {
+  it("shows title, repo→base and branch", () => {
+    const { blocks } = renderInputRequest(
+      approvalReq("open_pull_request", {
+        repo: "mama-sh/deskmate",
+        branch: "deskmate/omri/x",
+        base: "main",
+        title: "Frame thread context as untrusted",
+        body: "why + how verified",
+        commitMessage: "fix: ...",
+      }),
+    );
+    const dump = JSON.stringify(blocks);
+    expect(dump).toContain("Open a pull request");
+    expect(dump).toContain("Frame thread context as untrusted");
+    expect(dump).toContain("mama-sh/deskmate → base main");
+    expect(dump).toContain("deskmate/omri/x");
+  });
+});
+
+describe("renderInputRequest — approval card labels & attribution", () => {
+  it("labels the buttons Approve/Reject and shows the deskmate + tool in context", () => {
+    const { blocks } = renderInputRequest(
+      approvalReq("record_decision", { title: "T", detail: "D" }),
+      "Omri",
+    );
+    const els = (blocks.find((b) => b.type === "actions") as any).elements as any[];
+    expect(els[0].text.text).toBe("Approve");
+    expect(els[1].text.text).toBe("Reject");
+    const context = blocks.find((b) => b.type === "context") as any;
+    expect(JSON.stringify(context)).toContain("Omri · requested via `record_decision`");
+  });
+});

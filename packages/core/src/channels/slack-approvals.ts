@@ -61,6 +61,25 @@ const TOOL_DESCRIPTORS: Record<string, ToolDescriptor> = {
     headline: (i) => str(i.title) || undefined,
     fields: (i) => (str(i.detail) ? [{ label: "Details", value: str(i.detail) }] : []),
   },
+  forget: {
+    emoji: "🗑️",
+    verb: "Delete a memory",
+    danger: true,
+    headline: (i) => str(i.key) || undefined,
+  },
+  open_pull_request: {
+    emoji: "🔀",
+    verb: "Open a pull request",
+    headline: (i) => str(i.title) || undefined,
+    fields: (i) => {
+      const f: Field[] = [];
+      const base = str(i.base);
+      if (str(i.repo)) f.push({ label: "Repo", value: base ? `${str(i.repo)} → base ${base}` : str(i.repo) });
+      if (str(i.branch)) f.push({ label: "Branch", value: str(i.branch) });
+      if (str(i.body)) f.push({ label: "Description", value: str(i.body) });
+      return f;
+    },
+  },
 };
 
 function humanizeToolName(name: string): string {
@@ -110,9 +129,12 @@ function approvalActions(req: InputRequest): SlackBlock {
 
 function renderApproval(req: InputRequest, deskmateName?: string): RenderedRequest {
   const d = TOOL_DESCRIPTORS[req.action.toolName] ?? fallbackDescriptor(req.action.toolName);
+  const ask = d.danger
+    ? `:warning: ${d.emoji} *${d.verb}* — this can't be undone`
+    : `${d.emoji} *${d.verb}*`;
   const blocks: SlackBlock[] = [
     { type: "header", text: { type: "plain_text", text: "🔐 Approval needed", emoji: true } },
-    section(`${d.emoji} *${d.verb}*`),
+    section(ask),
   ];
   const headline = d.headline?.(req.action.input);
   if (headline) blocks.push(section(`*${headline}*`));
