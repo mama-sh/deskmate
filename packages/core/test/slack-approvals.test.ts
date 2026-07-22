@@ -180,6 +180,52 @@ describe("renderInputRequest — question parity", () => {
     const optionText = (blocks.find((b) => b.type === "actions") as any).elements[0].options[0].text.text;
     expect(optionText.length).toBeLessThanOrEqual(75);
   });
+
+  it("renders more than 6 options as a static_select", () => {
+    const options = Array.from({ length: 7 }, (_, i) => ({ id: `o${i}`, label: `Option ${i}` }));
+    const req: InputRequest = {
+      action: { callId: "c", input: {}, kind: "tool-call", toolName: "ask_question" },
+      display: "select",
+      options,
+      prompt: "Pick one",
+      requestId: "q4",
+    };
+    const { blocks } = renderInputRequest(req);
+    const menu = (blocks.find((b) => b.type === "actions") as any).elements[0];
+    expect(menu.type).toBe("static_select");
+    expect(menu.action_id).toBe("eve_input:q4");
+  });
+
+  it("renders options without display:select as eve button ids", () => {
+    const req: InputRequest = {
+      action: { callId: "c", input: {}, kind: "tool-call", toolName: "ask_question" },
+      options: [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }],
+      prompt: "Proceed?",
+      requestId: "q5",
+    };
+    const { blocks } = renderInputRequest(req);
+    const els = (blocks.find((b) => b.type === "actions") as any).elements as any[];
+    expect(els[0].action_id).toBe("eve_input:q5:button:0");
+    expect(els[0].value).toBe("yes");
+  });
+});
+
+describe("renderInputRequest — mrkdwn injection hardening", () => {
+  it("neutralizes Slack control sequences in model-supplied fields and fallback text", () => {
+    const { blocks, text } = renderInputRequest(
+      approvalReq("record_decision", {
+        title: "Ping <!channel> now",
+        detail: "Click <https://evil.example|github.com/safe>",
+      }),
+    );
+    const dump = JSON.stringify(blocks);
+    // No raw Slack mention/link syntax survives on the decision surface.
+    expect(dump).not.toContain("<!channel>");
+    expect(dump).not.toContain("<https://evil.example|");
+    expect(dump).toContain("&lt;!channel&gt;");
+    // The notification/fallback text can't ping via <!channel> either.
+    expect(text).not.toContain("<!channel>");
+  });
 });
 
 const roster = {

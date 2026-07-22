@@ -119,6 +119,17 @@ function plainText(text: string, max = PLAIN_TEXT_MAX): SlackBlock {
   return { type: "plain_text", text: truncate(text, max) };
 }
 
+// Neutralize Slack mrkdwn control chars in MODEL-supplied text before it lands on
+// the human's approval decision surface, so a tool-input value can't inject a
+// `<!channel>` ping, a `<@U…>` mention, or a masked `<url|text>` link that
+// spoofs where "Approve" leads. Escaping only `& < >` (Slack's documented set)
+// leaves legitimate `*bold*`/`_italic_` formatting intact — nicer than eve's raw
+// code-fence, and still safe. Applied to headlines, field labels/values, and
+// question prompts; our own literals (verbs, "Repo:") pass through unchanged.
+function escapeMrkdwn(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 export function isApproval(req: InputRequest): boolean {
   return (
     req.display === "confirmation" &&
@@ -151,15 +162,17 @@ function renderApproval(req: InputRequest, deskmateName?: string): RenderedReque
     section(ask),
   ];
   const headline = d.headline?.(req.action.input);
-  if (headline) blocks.push(section(`*${headline}*`));
-  for (const f of d.fields?.(req.action.input) ?? []) blocks.push(section(`*${f.label}:* ${f.value}`));
+  const safeHeadline = headline ? escapeMrkdwn(headline) : undefined;
+  if (safeHeadline) blocks.push(section(`*${safeHeadline}*`));
+  for (const f of d.fields?.(req.action.input) ?? [])
+    blocks.push(section(`*${escapeMrkdwn(f.label)}:* ${escapeMrkdwn(f.value)}`));
   const who = deskmateName ? `${deskmateName} · ` : "";
   blocks.push({
     type: "context",
     elements: [{ type: "mrkdwn", text: `${who}requested via \`${req.action.toolName}\`` }],
   });
   blocks.push(approvalActions(req));
-  return { blocks, text: `Approval needed: ${d.verb}${headline ? ` — ${headline}` : ""}` };
+  return { blocks, text: `Approval needed: ${d.verb}${safeHeadline ? ` — ${safeHeadline}` : ""}` };
 }
 
 function toOption(opt: InputOption): SlackBlock {
@@ -169,7 +182,7 @@ function toOption(opt: InputOption): SlackBlock {
 }
 
 function renderQuestion(req: InputRequest): RenderedRequest {
-  const blocks: SlackBlock[] = [section(req.prompt)];
+  const blocks: SlackBlock[] = [section(escapeMrkdwn(req.prompt))];
   const opts = req.options ?? [];
   if (opts.length > 0 && req.display === "select") {
     const menu =
