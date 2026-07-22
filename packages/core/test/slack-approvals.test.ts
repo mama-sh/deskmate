@@ -227,6 +227,16 @@ describe("renderInputRequest — mrkdwn injection hardening", () => {
     expect(text).not.toContain("<!channel>");
   });
 
+  it("escapes the deskmate name in the approval context block", () => {
+    const { blocks } = renderInputRequest(
+      approvalReq("record_decision", { title: "T", detail: "D" }),
+      "R&D <!channel>",
+    );
+    const context = JSON.stringify(blocks.find((b) => b.type === "context"));
+    expect(context).not.toContain("<!channel>");
+    expect(context).toContain("R&amp;D");
+  });
+
   it("escapes Slack control syntax in a question's notification fallback", () => {
     const req: InputRequest = {
       action: { callId: "c", input: {}, kind: "tool-call", toolName: "ask_question" },

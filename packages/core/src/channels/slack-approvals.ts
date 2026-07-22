@@ -166,7 +166,9 @@ function renderApproval(req: InputRequest, deskmateName?: string): RenderedReque
   if (safeHeadline) blocks.push(section(`*${safeHeadline}*`));
   for (const f of d.fields?.(req.action.input) ?? [])
     blocks.push(section(`*${escapeMrkdwn(f.label)}:* ${escapeMrkdwn(f.value)}`));
-  const who = deskmateName ? `${deskmateName} · ` : "";
+  // deskmateName is consumer-supplied (roster displayName), so escape it too —
+  // both for consistency and to survive a name with `&`/`<`/`>`.
+  const who = deskmateName ? `${escapeMrkdwn(deskmateName)} · ` : "";
   blocks.push({
     type: "context",
     elements: [{ type: "mrkdwn", text: `${who}requested via \`${req.action.toolName}\`` }],
