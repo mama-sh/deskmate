@@ -149,7 +149,55 @@ function renderApproval(req: InputRequest, deskmateName?: string): RenderedReque
   return { blocks, text: `Approval needed: ${d.verb}${headline ? ` — ${headline}` : ""}` };
 }
 
+function toOption(opt: InputOption): SlackBlock {
+  const o: SlackBlock = { text: { type: "plain_text", text: opt.label }, value: opt.id };
+  if (opt.description) o.description = { type: "plain_text", text: opt.description };
+  return o;
+}
+
+function renderQuestion(req: InputRequest): RenderedRequest {
+  const blocks: SlackBlock[] = [section(req.prompt)];
+  const opts = req.options ?? [];
+  if (opts.length > 0 && req.display === "select") {
+    const menu =
+      opts.length <= 6
+        ? { type: "radio_buttons", action_id: `${HITL_ACTION_PREFIX}${req.requestId}`, options: opts.map(toOption) }
+        : {
+            type: "static_select",
+            action_id: `${HITL_ACTION_PREFIX}${req.requestId}`,
+            options: opts.map(toOption),
+            placeholder: { type: "plain_text", text: "Choose an option" },
+          };
+    blocks.push({ type: "actions", elements: [menu] });
+  } else if (opts.length > 0) {
+    blocks.push({
+      type: "actions",
+      elements: opts.map((opt, i) => ({
+        type: "button",
+        action_id: `${HITL_ACTION_PREFIX}${req.requestId}:button:${i}`,
+        text: { type: "plain_text", text: opt.label },
+        value: opt.id,
+        ...(opt.style === "primary" || opt.style === "danger" ? { style: opt.style } : {}),
+      })),
+    });
+  } else {
+    // freeform: eve opens the modal itself from the section block + this trigger
+    blocks.push({
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          action_id: `${HITL_FREEFORM_ACTION_PREFIX}${req.requestId}`,
+          text: { type: "plain_text", text: "Type your answer" },
+          style: "primary",
+          value: req.requestId,
+        },
+      ],
+    });
+  }
+  return { blocks, text: req.prompt };
+}
+
 export function renderInputRequest(req: InputRequest, deskmateName?: string): RenderedRequest {
-  // Question parity is added in Task 4; until then non-approvals fall through.
-  return renderApproval(req, deskmateName);
+  return isApproval(req) ? renderApproval(req, deskmateName) : renderQuestion(req);
 }

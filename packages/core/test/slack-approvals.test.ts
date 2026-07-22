@@ -134,3 +134,33 @@ describe("renderInputRequest — open_pull_request without base", () => {
     expect(dump).not.toContain("→ base");
   });
 });
+
+describe("renderInputRequest — question parity", () => {
+  it("renders a select as a menu with the eve select action id", () => {
+    const req: InputRequest = {
+      action: { callId: "c", input: {}, kind: "tool-call", toolName: "ask_question" },
+      display: "select",
+      options: [{ id: "a", label: "Option A" }, { id: "b", label: "Option B" }],
+      prompt: "Pick one",
+      requestId: "q1",
+    };
+    const { blocks } = renderInputRequest(req);
+    const menu = (blocks.find((b) => b.type === "actions") as any).elements[0];
+    expect(menu.action_id).toBe("eve_input:q1");
+    expect(JSON.stringify(blocks)).toContain("Pick one");
+  });
+
+  it("renders a freeform question as an eve freeform trigger", () => {
+    const req: InputRequest = {
+      action: { callId: "c", input: {}, kind: "tool-call", toolName: "ask_question" },
+      display: "text",
+      allowFreeform: true,
+      prompt: "What should I name it?",
+      requestId: "q2",
+    };
+    const { blocks } = renderInputRequest(req);
+    const btn = (blocks.find((b) => b.type === "actions") as any).elements[0];
+    expect(btn.action_id).toBe("eve_input_freeform:q2");
+    expect(btn.value).toBe("q2");
+  });
+});
