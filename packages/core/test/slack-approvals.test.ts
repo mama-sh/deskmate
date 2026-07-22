@@ -104,3 +104,33 @@ describe("renderInputRequest — approval card labels & attribution", () => {
     expect(JSON.stringify(context)).toContain("Omri · requested via `record_decision`");
   });
 });
+
+describe("renderInputRequest — generic fallback", () => {
+  it("renders arbitrary fields without dumping escaped JSON", () => {
+    const { blocks } = renderInputRequest(approvalReq("charge_card", { amount: 4200, currency: "USD" }));
+    const dump = JSON.stringify(blocks);
+    expect(dump).toContain("charge card"); // humanized verb
+    expect(dump).toContain("amount");
+    expect(dump).toContain("4200");
+    expect(dump).not.toContain('\\"amount\\":4200'); // not a JSON blob of the whole input
+    expect((blocks[blocks.length - 1] as any).type).toBe("actions");
+  });
+});
+
+describe("renderInputRequest — danger is opt-in", () => {
+  it("does not add the irreversibility note to non-danger tools", () => {
+    const { blocks } = renderInputRequest(approvalReq("record_decision", { title: "T", detail: "D" }));
+    expect(JSON.stringify(blocks)).not.toMatch(/can.?t be undone/i);
+  });
+});
+
+describe("renderInputRequest — open_pull_request without base", () => {
+  it("shows the repo without a base arrow when base is omitted", () => {
+    const { blocks } = renderInputRequest(
+      approvalReq("open_pull_request", { repo: "mama-sh/deskmate", branch: "b", title: "t", body: "x", commitMessage: "c" }),
+    );
+    const dump = JSON.stringify(blocks);
+    expect(dump).toContain("mama-sh/deskmate");
+    expect(dump).not.toContain("→ base");
+  });
+});

@@ -74,7 +74,8 @@ const TOOL_DESCRIPTORS: Record<string, ToolDescriptor> = {
     fields: (i) => {
       const f: Field[] = [];
       const base = str(i.base);
-      if (str(i.repo)) f.push({ label: "Repo", value: base ? `${str(i.repo)} → base ${base}` : str(i.repo) });
+      const repo = str(i.repo);
+      if (repo) f.push({ label: "Repo", value: base ? `${repo} → base ${base}` : repo });
       if (str(i.branch)) f.push({ label: "Branch", value: str(i.branch) });
       if (str(i.body)) f.push({ label: "Description", value: str(i.body) });
       return f;
