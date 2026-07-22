@@ -16,6 +16,10 @@
 // slack-approvals.test.ts locks this contract so an eve upgrade that changes it
 // fails loudly instead of silently breaking approvals in production.
 
+import type { SlackChannelEvents } from "eve/channels/slack";
+import { deskmateSlackIdentity } from "../deskmate-identity.js";
+import type { Roster } from "../roster.js";
+
 const HITL_ACTION_PREFIX = "eve_input:";
 const HITL_FREEFORM_ACTION_PREFIX = "eve_input_freeform:";
 const SECTION_TEXT_MAX = 3000; // Slack section text hard limit
@@ -209,4 +213,58 @@ function renderQuestion(req: InputRequest): RenderedRequest {
 
 export function renderInputRequest(req: InputRequest, deskmateName?: string): RenderedRequest {
   return isApproval(req) ? renderApproval(req, deskmateName) : renderQuestion(req);
+}
+
+/**
+ * `events["input.requested"]` handler: render each pending HITL request as a
+ * human-readable card and post it AS the requesting deskmate when we can resolve
+ * one and the thread is anchored; otherwise post under the shared bot. `blocks`
+ * is identical on both paths.
+ *
+ * Identity is resolved from `activeDeskmateId` (set by slack.ts's
+ * `actions.requested` handler on a `subagent-call`). We read it RAW here rather
+ * than turn-scoped (`activeDeskmateForTurn`): every approval-gated tool is
+ * subagent-bound, so the delegation that raises the approval sets this in the
+ * same conversation — but the approval's `input.requested` may carry the child
+ * turn's id, in which case turn-scoping would drop the identity and always fall
+ * back to the shared bot, defeating the point. The raw read names the current
+ * deskmate in every reachable case. The only stale-attribution risk — a
+ * front-desk-level approval tool firing after an aborted delegating turn (no
+ * `turn.failed` reset) — does not exist in the current toolset. Identity is
+ * best-effort and cosmetic; it never affects the approval contract or its
+ * resolution. Confirm end-to-end in the live check before hardening further.
+ */
+export function inputRequestedHandler(roster: Roster): NonNullable<SlackChannelEvents["input.requested"]> {
+  return async (data, channel) => {
+    const state = channel.state as {
+      activeDeskmateId?: string | null;
+      channelId: string | null;
+      threadTs: string | null;
+    };
+    const id = typeof state.activeDeskmateId === "string" ? state.activeDeskmateId : null;
+    const identity = deskmateSlackIdentity(roster, id);
+    const deskmateName = identity?.username;
+    const { channelId, threadTs } = state;
+
+    for (const req of data.requests as unknown as InputRequest[]) {
+      const { blocks, text } = renderInputRequest(req, deskmateName);
+      if (identity && channelId && threadTs) {
+        try {
+          const res = await channel.slack.request("chat.postMessage", {
+            channel: channelId,
+            thread_ts: threadTs,
+            blocks,
+            text,
+            username: identity.username,
+            ...(identity.icon_url ? { icon_url: identity.icon_url } : {}),
+            ...(identity.icon_emoji ? { icon_emoji: identity.icon_emoji } : {}),
+          });
+          if (res.ok) continue;
+        } catch {
+          // fall through to the shared-bot post
+        }
+      }
+      await channel.thread.post({ blocks, text });
+    }
+  };
 }

@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { renderInputRequest, type InputRequest } from "../src/channels/slack-approvals.js";
+import { inputRequestedHandler } from "../src/channels/slack-approvals.js";
+import type { Roster } from "../src/roster.js";
 
 function approvalReq(
   toolName: string,
@@ -177,5 +179,58 @@ describe("renderInputRequest — question parity", () => {
     const { blocks } = renderInputRequest(req);
     const optionText = (blocks.find((b) => b.type === "actions") as any).elements[0].options[0].text.text;
     expect(optionText.length).toBeLessThanOrEqual(75);
+  });
+});
+
+const roster = {
+  omri: { id: "omri", displayName: "Omri", emoji: ":robot_face:", summary: "DevOps" },
+} as unknown as Roster;
+
+function fakeChannel(state: Record<string, unknown>) {
+  const requests: { method: string; payload: any }[] = [];
+  const posts: any[] = [];
+  const channel = {
+    state,
+    slack: {
+      request: async (method: string, payload: any) => {
+        requests.push({ method, payload });
+        return { ok: true };
+      },
+    },
+    thread: {
+      post: async (input: any) => {
+        posts.push(input);
+        return { id: "posted" };
+      },
+    },
+  } as any;
+  return { channel, requests, posts };
+}
+
+describe("inputRequestedHandler", () => {
+  it("posts the card AS the active deskmate when the thread is anchored", async () => {
+    const { channel, requests, posts } = fakeChannel({ activeDeskmateId: "omri", channelId: "C1", threadTs: "T1" });
+    await inputRequestedHandler(roster)(
+      { requests: [approvalReq("record_decision", { title: "T", detail: "D" })] } as any,
+      channel,
+      {} as any,
+    );
+    expect(requests).toHaveLength(1);
+    expect(requests[0].method).toBe("chat.postMessage");
+    expect(requests[0].payload.username).toBe("Omri");
+    expect(Array.isArray(requests[0].payload.blocks)).toBe(true);
+    expect(posts).toHaveLength(0);
+  });
+
+  it("falls back to the shared-bot post when the thread is not anchored", async () => {
+    const { channel, requests, posts } = fakeChannel({ activeDeskmateId: "omri", channelId: "C1", threadTs: null });
+    await inputRequestedHandler(roster)(
+      { requests: [approvalReq("forget", { key: "k" })] } as any,
+      channel,
+      {} as any,
+    );
+    expect(requests).toHaveLength(0);
+    expect(posts).toHaveLength(1);
+    expect(posts[0].blocks).toBeTruthy();
   });
 });
