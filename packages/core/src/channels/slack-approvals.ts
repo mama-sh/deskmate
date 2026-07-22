@@ -234,18 +234,21 @@ export function renderInputRequest(req: InputRequest, deskmateName?: string): Re
  * one and the thread is anchored; otherwise post under the shared bot. `blocks`
  * is identical on both paths.
  *
- * Identity is resolved from `activeDeskmateId` (set by slack.ts's
- * `actions.requested` handler on a `subagent-call`). We read it RAW here rather
- * than turn-scoped (`activeDeskmateForTurn`): every approval-gated tool is
- * subagent-bound, so the delegation that raises the approval sets this in the
- * same conversation — but the approval's `input.requested` may carry the child
- * turn's id, in which case turn-scoping would drop the identity and always fall
- * back to the shared bot, defeating the point. The raw read names the current
- * deskmate in every reachable case. The only stale-attribution risk — a
- * front-desk-level approval tool firing after an aborted delegating turn (no
- * `turn.failed` reset) — does not exist in the current toolset. Identity is
- * best-effort and cosmetic; it never affects the approval contract or its
- * resolution. Confirm end-to-end in the live check before hardening further.
+ * Identity is resolved from `activeDeskmateId` on the channel state. Every
+ * approval-gated tool is subagent-bound, and a subagent runs as a separate child
+ * session — but eve forwards the child's approval onto the PARENT session's
+ * stream and renders it against the PARENT's channel state (traced through eve's
+ * subagent-HITL bridge: subagent-adapter → parent turn inbox → proxied
+ * `input.requested`). So the id the parent turn's `actions.requested` stored on
+ * that state IS present here. We read it RAW, not turn-scoped
+ * (`activeDeskmateForTurn`): the proxied event carries the CHILD turn's id, so
+ * `activeDeskmateForTurn(state, data.turnId)` would never match and would always
+ * fall back to the shared bot — defeating the point.
+ *
+ * Known residual (cosmetic, #32): `activeDeskmateId` is a single scalar, so two
+ * delegations within one parent turn can attribute a late-bubbling approval to
+ * the wrong deskmate. Identity is best-effort and never affects the approval
+ * contract or its resolution; only the sender name/avatar.
  */
 export function inputRequestedHandler(roster: Roster): NonNullable<SlackChannelEvents["input.requested"]> {
   return async (data, channel) => {
