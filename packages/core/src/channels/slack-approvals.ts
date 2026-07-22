@@ -106,6 +106,15 @@ function section(mrkdwn: string): SlackBlock {
   return { type: "section", text: { type: "mrkdwn", text: truncate(mrkdwn) } };
 }
 
+// Slack caps button/option/menu `plain_text` at 75 chars and rejects the WHOLE
+// chat.postMessage if any element exceeds it — so an over-long option label would
+// make the question fail to post. Cap every plain_text element, matching eve's
+// own `truncatePlainText`.
+const PLAIN_TEXT_MAX = 75;
+function plainText(text: string, max = PLAIN_TEXT_MAX): SlackBlock {
+  return { type: "plain_text", text: truncate(text, max) };
+}
+
 export function isApproval(req: InputRequest): boolean {
   return (
     req.display === "confirmation" &&
@@ -121,7 +130,7 @@ function approvalActions(req: InputRequest): SlackBlock {
   const elements = (req.options ?? []).map((opt, i) => ({
     type: "button",
     action_id: `${HITL_ACTION_PREFIX}${req.requestId}:button:${i}`,
-    text: { type: "plain_text", text: labelFor[opt.id] ?? opt.label },
+    text: plainText(labelFor[opt.id] ?? opt.label),
     value: opt.id,
     ...(styleFor[opt.id] ? { style: styleFor[opt.id] } : {}),
   }));
@@ -150,8 +159,8 @@ function renderApproval(req: InputRequest, deskmateName?: string): RenderedReque
 }
 
 function toOption(opt: InputOption): SlackBlock {
-  const o: SlackBlock = { text: { type: "plain_text", text: opt.label }, value: opt.id };
-  if (opt.description) o.description = { type: "plain_text", text: opt.description };
+  const o: SlackBlock = { text: plainText(opt.label), value: opt.id };
+  if (opt.description) o.description = plainText(opt.description);
   return o;
 }
 
@@ -175,7 +184,7 @@ function renderQuestion(req: InputRequest): RenderedRequest {
       elements: opts.map((opt, i) => ({
         type: "button",
         action_id: `${HITL_ACTION_PREFIX}${req.requestId}:button:${i}`,
-        text: { type: "plain_text", text: opt.label },
+        text: plainText(opt.label),
         value: opt.id,
         ...(opt.style === "primary" || opt.style === "danger" ? { style: opt.style } : {}),
       })),

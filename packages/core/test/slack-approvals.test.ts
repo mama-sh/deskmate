@@ -163,4 +163,19 @@ describe("renderInputRequest — question parity", () => {
     expect(btn.action_id).toBe("eve_input_freeform:q2");
     expect(btn.value).toBe("q2");
   });
+
+  it("caps over-long option labels at Slack's 75-char plain_text limit", () => {
+    // Slack rejects the whole message if any option/button plain_text exceeds 75 chars.
+    const longLabel = "A".repeat(120);
+    const req: InputRequest = {
+      action: { callId: "c", input: {}, kind: "tool-call", toolName: "ask_question" },
+      display: "select",
+      options: [{ id: "a", label: longLabel }],
+      prompt: "Pick one",
+      requestId: "q3",
+    };
+    const { blocks } = renderInputRequest(req);
+    const optionText = (blocks.find((b) => b.type === "actions") as any).elements[0].options[0].text.text;
+    expect(optionText.length).toBeLessThanOrEqual(75);
+  });
 });
