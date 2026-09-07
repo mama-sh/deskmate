@@ -6,7 +6,7 @@
 
 **Architecture:** Approach A (front desk as moderator). The root already exposes every deskmate as a subagent tool. We add a `deskmate_says` tool the root calls to voice a deskmate's message; the **Slack channel's `action.result` handler** does the actual posting under that deskmate's identity (reusing PR #2's `chat.postMessage` path), enforces a per-conversation turn cap via `channel.state`, and suppresses the default single-deskmate post when a convene ran. A convene loop in the root's instructions drives who speaks next.
 
-**Tech Stack:** Vercel Eve (`defineTool`, `slackChannel` events `action.result` / `message.completed`), Zod, Vitest, TypeScript. Node 24 (`export PATH="/Users/davidstrouk/.nvm/versions/node/v24.18.0/bin:$PATH"`).
+**Tech Stack:** Vercel Eve (`defineTool`, `slackChannel` events `action.result` / `message.completed`), Zod, Vitest, TypeScript. Node 24 (`export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"`).
 
 **Refinement over the design doc:** the design described `deskmate_says` posting directly; a tool's `ctx` can't reach `channel.slack`, so posting lives in the channel's `action.result` handler (which receives the full tool output). Same Approach A, cleaner seam.
 
@@ -332,7 +332,7 @@ Apply the same casting style already used in the file for `activeDeskmateId` so 
 
 **Step 5: Typecheck + build**
 
-Run: `export PATH="/Users/davidstrouk/.nvm/versions/node/v24.18.0/bin:$PATH" && pnpm typecheck && pnpm build`
+Run: `export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" && pnpm typecheck && pnpm build`
 Expected: both pass.
 
 **Step 6: Commit**
@@ -379,7 +379,7 @@ a deskmate that isn't in the roster.
 
 **Step 3: Build (instructions compile with the agent)**
 
-Run: `export PATH="/Users/davidstrouk/.nvm/versions/node/v24.18.0/bin:$PATH" && pnpm build`
+Run: `export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" && pnpm build`
 Expected: pass.
 
 **Step 4: Commit**
@@ -418,7 +418,7 @@ git commit -m "docs: document multi-deskmate collaboration + DESKMATE_MAX_TURNS"
 
 **Step 1: Full suite**
 
-Run: `export PATH="/Users/davidstrouk/.nvm/versions/node/v24.18.0/bin:$PATH" && pnpm typecheck && pnpm test && pnpm build`
+Run: `export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" && pnpm typecheck && pnpm test && pnpm build`
 Expected: all pass (existing 24 tests + the new ones).
 
 **Step 2: Deploy + Slack sandbox test** (manual, mirrors prior verification):

@@ -2,7 +2,7 @@
 
 - **Date:** 2026-07-04
 - **Status:** approved design, ready for implementation plan
-- **Author:** David Strouk (with Claude)
+- **Author:** mimu-sh (with Claude)
 
 ## Summary
 
